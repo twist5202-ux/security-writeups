@@ -15,38 +15,38 @@ import datetime
 import markdown
 
 ROOT = pathlib.Path(__file__).parent
-SRC = ROOT / "writeups"
+SRC = ROOT / "writeups-en"
 OUT = ROOT / "site"
 ASSETS = OUT / "assets"
 
-# ── Metadata tiap writeup (judul pendek, severity, ringkas) ──
+# ── Metadata per write-up (short title, severity, one-line takeaway) ──
 META = {
     "001": {
-        "short": "SQL Injection → Kompromi Database Penuh",
+        "short": "SQL Injection → Full Database Compromise",
         "target": "Juice Shop",
         "class": "Injection",
         "sev": "CRITICAL",
         "cvss": "9.8",
         "file": "001-juice-shop-sqli.md",
-        "take": "Bisa dump 24 akun, pecah hash admin, dan login sebagai administrator.",
+        "take": "Dumped 24 accounts, cracked the admin hash, and logged in as administrator.",
     },
     "002": {
-        "short": "Pengkulitan Penuh (Recon → Eksploitasi)",
+        "short": "Full Reconnaissance to Exploitation",
         "target": "Juice Shop",
         "class": "Reconnaissance",
         "sev": "MULTI",
         "cvss": "1C·3H·3M·2L",
         "file": "002-juice-shop-full-recon.md",
-        "take": "9 temuan dari directory listing sampai bypass filter null byte.",
+        "take": "Nine findings, from an open directory listing to a null-byte filter bypass.",
     },
     "003": {
-        "short": "Dekripsi Dokumen Konfidensial (RSA Tanpa Padding)",
+        "short": "Decrypting a Confidential Document (Unpadded RSA)",
         "target": "Juice Shop",
         "class": "Cryptography",
         "sev": "HIGH",
         "cvss": "7.5",
         "file": "003-juice-shop-rsa-decrypt.md",
-        "take": "Bongkar bytecode → ketemu RSA textbook → brute force 256 → dokumen ICO terbuka utuh.",
+        "take": "Decompiled the bytecode, found textbook RSA, brute-forced 256 candidates — document fully recovered.",
     },
     "004": {
         "short": "Broken Access Control + DOM XSS",
@@ -55,7 +55,7 @@ META = {
         "sev": "CRITICAL",
         "cvss": "9.1",
         "file": "004-juice-shop-broken-access-control-xss.md",
-        "take": "Ubah 36 produk dalam 1 detik tanpa login, plus XSS yang terbukti jalan.",
+        "take": "Modified 36 products in one second without logging in, plus XSS with confirmed execution.",
     },
 }
 
@@ -138,6 +138,21 @@ h2.sec::after{content:'';flex:1;height:1px;background:var(--line)}
   font-size:12px;color:var(--dim);flex-wrap:wrap;
 }
 .card .meta .go{color:var(--acc);margin-left:auto}
+
+/* ── about ── */
+#about{padding:0 0 56px}
+.about-box{
+  background:var(--bg2);border:1px solid var(--line);border-radius:14px;
+  padding:28px 30px;
+}
+.about-box p{color:var(--dim);margin-bottom:14px}
+.about-box p:last-child{margin-bottom:0}
+.about-box strong{color:var(--fg)}
+.skills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.skills span{
+  font-family:var(--mono);font-size:12px;color:var(--acc2);
+  border:1px solid var(--line);border-radius:6px;padding:4px 10px;
+}
 
 /* ── halaman writeup ── */
 article{padding:52px 0 80px}
@@ -233,7 +248,7 @@ def page(title, body, depth=0, subtitle=""):
     """Bungkus body dalam template halaman."""
     up = "../" * depth
     return f"""<!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -245,14 +260,14 @@ def page(title, body, depth=0, subtitle=""):
 <header class="site"><div class="wrap">
   <span class="brand">Twist<span class="dot">://</span>security</span>
   <nav>
-    <a href="{up}index.html">Writeups</a>
-    <a href="{up}index.html#tentang">Tentang</a>
+    <a href="{up}index.html">Write-ups</a>
+    <a href="{up}index.html#about">About</a>
   </nav>
 </div></header>
 {body}
 <footer class="site"><div class="wrap">
-  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
-  <span class="mono">dibuat {datetime.date.today().isoformat()}</span>
+  <span>Security research portfolio — testing performed in authorised training labs.</span>
+  <span class="mono">built {datetime.date.today().isoformat()}</span>
 </div></footer>
 </body>
 </html>
@@ -273,7 +288,7 @@ def build_index(entries):
   <div class="meta">
     <span>target: {html.escape(e['target'])}</span>
     <span>cvss: {html.escape(e['cvss'])}</span>
-    <span class="go">baca →</span>
+    <span class="go">read →</span>
   </div>
 </a>""")
 
@@ -281,44 +296,73 @@ def build_index(entries):
     body = f"""
 <section class="hero"><div class="wrap">
   <span class="tag">Security Research Portfolio</span>
-  <h1>Nemu celah, bikin laporan,<br><em>bukan cuma nge-scan.</em></h1>
-  <p class="lede">Kumpulan writeup dari latihan penetration testing di lab legal.
-     Tiap laporan lengkap: bukti reproduksi, akar masalah di kode, dan saran perbaikan konkret.</p>
+  <h1>Finding the gap is the job.<br><em>Explaining it is the craft.</em></h1>
+  <p class="lede">A collection of penetration testing write-ups from authorised training labs.
+     Every report is complete: reproduction evidence, root cause located in the code, and concrete remediation.</p>
   <div class="stats">
-    <div class="stat"><b>{len(entries)}</b><span>Writeup</span></div>
+    <div class="stat"><b>{len(entries)}</b><span>Write-ups</span></div>
     <div class="stat"><b>{n_crit}</b><span>Critical</span></div>
-    <div class="stat"><b>4</b><span>Kelas Bug</span></div>
-    <div class="stat"><b>100%</b><span>Terbukti Nyata</span></div>
+    <div class="stat"><b>4</b><span>Bug Classes</span></div>
+    <div class="stat"><b>100%</b><span>Verified</span></div>
   </div>
 </div></section>
 
-<section class="list" id="tentang"><div class="wrap">
-  <h2 class="sec">Laporan</h2>
+<section class="list" id="reports"><div class="wrap">
+  <h2 class="sec">Reports</h2>
   {''.join(cards)}
+</div></section>
+
+<section id="about"><div class="wrap">
+  <h2 class="sec">About</h2>
+  <div class="about-box">
+    <p><strong>Twist</strong> — security researcher focused on web application
+       penetration testing and vulnerability research.</p>
+    <p>Every finding in this portfolio was independently discovered, reproduced, and
+       documented. Reports include proof of exploitation, the root cause located in the
+       application code, and a fix. Findings that could not be confirmed are stated as
+       unconfirmed rather than overstated.</p>
+    <p>All testing was performed against <strong>authorised training labs</strong> —
+       primarily OWASP Juice Shop, an intentionally vulnerable application maintained
+       by OWASP for exactly this purpose. No third-party system was tested without
+       written permission.</p>
+    <div class="skills">
+      <span>Web App Pentesting</span>
+      <span>SQL Injection</span>
+      <span>Access Control</span>
+      <span>XSS</span>
+      <span>Cryptanalysis</span>
+      <span>Reverse Engineering</span>
+      <span>Reconnaissance</span>
+      <span>Report Writing</span>
+      <span>Python</span>
+      <span>JavaScript</span>
+      <span>Linux</span>
+    </div>
+  </div>
 </div></section>
 """
     return page("Twist — Security Research Portfolio", body,
-                subtitle="Writeup penetration testing: SQLi, broken access control, crypto, recon.")
+                subtitle="Penetration testing write-ups: SQL injection, broken access control, cryptography, reconnaissance.")
 
 
 def build_article(eid, meta, md_text):
     c = SEV_COLOR.get(meta["sev"], "#7d8b9e")
     body_html = md_to_html(md_text)
 
-    # buang H1 dari markdown, kita render sendiri di kotak judul
+    # drop the markdown H1 — we render our own title block
     body_html = re.sub(r"<h1[^>]*>.*?</h1>", "", body_html, count=1, flags=re.S)
 
     head = f"""<article><div class="wrap">
-<div class="crumbs"><a href="../index.html">writeups</a> / {eid}</div>
+<div class="crumbs"><a href="../index.html">write-ups</a> / {eid}</div>
 <h1>{html.escape(meta['short'])}</h1>
 <div class="meta-box">
   <div><b>Target</b> {html.escape(meta['target'])}</div>
-  <div><b>Kelas</b> {html.escape(meta['class'])}</div>
+  <div><b>Class</b> {html.escape(meta['class'])}</div>
   <div><b>Severity</b> <span class="badge" style="color:{c}">{meta['sev']}</span> <small>cvss {html.escape(meta['cvss'])}</small></div>
-  <div><b>Peneliti</b> Twist</div>
+  <div><b>Researcher</b> Twist</div>
 </div>
 {body_html}
-<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← back to all write-ups</a></div>
 </div></article>"""
     return page(f"{meta['short']} — Twist", head, depth=1)
 

