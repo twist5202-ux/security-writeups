@@ -66,8 +66,19 @@ git push
 
 | | |
 |---|---|
-| **Site** | https://twist5202-ux.github.io/security-writeups/ |
-| **Repo** | https://github.com/twist5202-ux/security-writeups |
+| **Site (root)** | https://twist5202-ux.github.io/ |
+| **Mirror** | https://twist5202-ux.github.io/security-writeups/ |
+| **Repo (root)** | https://github.com/twist5202-ux/twist5202-ux.github.io |
+| **Repo (mirror)** | https://github.com/twist5202-ux/security-writeups |
+
+Both repositories deploy the same content. The root site
+(`<username>.github.io`) serves at the clean URL; the project repo mirrors it.
+Pushing to either triggers its own build.
+
+```bash
+git push origin main    # → https://twist5202-ux.github.io/security-writeups/
+git push root main      # → https://twist5202-ux.github.io/
+```
 
 ### First-time setup (if cloning fresh)
 
