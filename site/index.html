@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twist — Security Research Portfolio</title>
+<meta name="description" content="Writeup penetration testing: SQLi, broken access control, crypto, recon.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site"><div class="wrap">
+  <span class="brand">Twist<span class="dot">://</span>security</span>
+  <nav>
+    <a href="index.html">Writeups</a>
+    <a href="index.html#tentang">Tentang</a>
+  </nav>
+</div></header>
+
+<section class="hero"><div class="wrap">
+  <span class="tag">Security Research Portfolio</span>
+  <h1>Nemu celah, bikin laporan,<br><em>bukan cuma nge-scan.</em></h1>
+  <p class="lede">Kumpulan writeup dari latihan penetration testing di lab legal.
+     Tiap laporan lengkap: bukti reproduksi, akar masalah di kode, dan saran perbaikan konkret.</p>
+  <div class="stats">
+    <div class="stat"><b>4</b><span>Writeup</span></div>
+    <div class="stat"><b>2</b><span>Critical</span></div>
+    <div class="stat"><b>4</b><span>Kelas Bug</span></div>
+    <div class="stat"><b>100%</b><span>Terbukti Nyata</span></div>
+  </div>
+</div></section>
+
+<section class="list" id="tentang"><div class="wrap">
+  <h2 class="sec">Laporan</h2>
+  <a class="card" href="writeups/001.html">
+  <div class="top">
+    <span class="badge" style="color:#ff4d5e">CRITICAL</span>
+    <span class="badge" style="color:var(--dim)">Injection</span>
+  </div>
+  <h3>SQL Injection → Kompromi Database Penuh</h3>
+  <p>Bisa dump 24 akun, pecah hash admin, dan login sebagai administrator.</p>
+  <div class="meta">
+    <span>target: Juice Shop</span>
+    <span>cvss: 9.8</span>
+    <span class="go">baca →</span>
+  </div>
+</a><a class="card" href="writeups/002.html">
+  <div class="top">
+    <span class="badge" style="color:#8b9dff">MULTI</span>
+    <span class="badge" style="color:var(--dim)">Reconnaissance</span>
+  </div>
+  <h3>Pengkulitan Penuh (Recon → Eksploitasi)</h3>
+  <p>9 temuan dari directory listing sampai bypass filter null byte.</p>
+  <div class="meta">
+    <span>target: Juice Shop</span>
+    <span>cvss: 1C·3H·3M·2L</span>
+    <span class="go">baca →</span>
+  </div>
+</a><a class="card" href="writeups/003.html">
+  <div class="top">
+    <span class="badge" style="color:#ff9d3d">HIGH</span>
+    <span class="badge" style="color:var(--dim)">Cryptography</span>
+  </div>
+  <h3>Dekripsi Dokumen Konfidensial (RSA Tanpa Padding)</h3>
+  <p>Bongkar bytecode → ketemu RSA textbook → brute force 256 → dokumen ICO terbuka utuh.</p>
+  <div class="meta">
+    <span>target: Juice Shop</span>
+    <span>cvss: 7.5</span>
+    <span class="go">baca →</span>
+  </div>
+</a><a class="card" href="writeups/004.html">
+  <div class="top">
+    <span class="badge" style="color:#ff4d5e">CRITICAL</span>
+    <span class="badge" style="color:var(--dim)">Access Control</span>
+  </div>
+  <h3>Broken Access Control + DOM XSS</h3>
+  <p>Ubah 36 produk dalam 1 detik tanpa login, plus XSS yang terbukti jalan.</p>
+  <div class="meta">
+    <span>target: Juice Shop</span>
+    <span>cvss: 9.1</span>
+    <span class="go">baca →</span>
+  </div>
+</a>
+</div></section>
+
+<footer class="site"><div class="wrap">
+  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
+  <span class="mono">dibuat 2026-10-09</span>
+</div></footer>
+</body>
+</html>

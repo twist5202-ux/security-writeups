@@ -1,0 +1,147 @@
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0d13; --bg2:#0f131b; --card:#131924; --line:#1e2733;
+  --fg:#dfe6f0; --dim:#7d8b9e; --acc:#4dffc3; --acc2:#4d8bff;
+  --code:#0b0f16; --mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg); color:var(--fg);
+  font:16px/1.75 'Inter',-apple-system,'Segoe UI',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:860px;margin:0 auto;padding:0 24px}
+
+/* ── header ── */
+header.site{
+  border-bottom:1px solid var(--line); padding:18px 0;
+  position:sticky; top:0; background:rgba(10,13,19,.92);
+  backdrop-filter:blur(12px); z-index:20;
+}
+header.site .wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{font-family:var(--mono);font-weight:700;letter-spacing:-.5px;font-size:15px}
+.brand .dot{color:var(--acc)}
+header.site nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+header.site nav a{color:var(--dim)}
+header.site nav a:hover{color:var(--acc)}
+
+/* ── hero ── */
+.hero{padding:72px 0 56px;border-bottom:1px solid var(--line)}
+.hero .tag{
+  display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--acc);border:1px solid var(--acc);
+  border-radius:100px;padding:5px 14px;margin-bottom:22px;opacity:.85;
+}
+.hero h1{font-size:clamp(30px,5.2vw,46px);line-height:1.15;letter-spacing:-1.5px;font-weight:800}
+.hero h1 em{font-style:normal;color:var(--acc)}
+.hero p.lede{color:var(--dim);font-size:17px;margin-top:20px;max-width:640px}
+.stats{display:flex;gap:34px;flex-wrap:wrap;margin-top:38px}
+.stat b{display:block;font-family:var(--mono);font-size:26px;color:var(--acc);line-height:1.2}
+.stat span{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1.4px}
+
+/* ── daftar writeup ── */
+section.list{padding:56px 0}
+h2.sec{
+  font-size:13px;text-transform:uppercase;letter-spacing:2.4px;
+  color:var(--dim);font-weight:600;margin-bottom:26px;
+  display:flex;align-items:center;gap:12px;
+}
+h2.sec::after{content:'';flex:1;height:1px;background:var(--line)}
+
+.card{
+  display:block;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;padding:26px 28px;margin-bottom:16px;
+  transition:border-color .18s,transform .18s;
+}
+.card:hover{border-color:var(--acc);transform:translateY(-2px);text-decoration:none}
+.card .top{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.badge{
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;
+  padding:3px 10px;border-radius:6px;border:1px solid currentColor;
+}
+.card h3{font-size:19px;letter-spacing:-.4px;line-height:1.35;color:var(--fg);font-weight:700}
+.card p{color:var(--dim);font-size:14.5px;margin-top:10px}
+.card .meta{
+  display:flex;gap:16px;margin-top:16px;font-family:var(--mono);
+  font-size:12px;color:var(--dim);flex-wrap:wrap;
+}
+.card .meta .go{color:var(--acc);margin-left:auto}
+
+/* ── halaman writeup ── */
+article{padding:52px 0 80px}
+.crumbs{font-family:var(--mono);font-size:13px;color:var(--dim);margin-bottom:26px}
+article h1{
+  font-size:clamp(24px,4vw,34px);line-height:1.22;letter-spacing:-1px;
+  font-weight:800;margin-bottom:26px;
+}
+.meta-box{
+  background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--acc);
+  border-radius:10px;padding:18px 22px;margin-bottom:38px;font-size:14.5px;
+}
+.meta-box b{color:var(--dim);font-weight:600;display:inline-block;min-width:110px}
+article h2{
+  font-size:22px;letter-spacing:-.6px;margin:44px 0 16px;padding-top:20px;
+  border-top:1px solid var(--line);font-weight:700;
+}
+article h3{font-size:17px;margin:30px 0 12px;color:var(--acc2);font-weight:700}
+article h4{font-size:15px;margin:22px 0 10px;color:var(--fg);font-weight:700}
+article p{margin-bottom:16px}
+article ul,article ol{margin:0 0 18px 24px}
+article li{margin-bottom:8px}
+article strong{color:#fff;font-weight:650}
+article code{
+  background:var(--code);border:1px solid var(--line);border-radius:5px;
+  padding:2px 6px;font-family:var(--mono);font-size:.875em;color:var(--acc);
+}
+article pre{
+  background:var(--code);border:1px solid var(--line);border-radius:11px;
+  padding:18px 20px;overflow-x:auto;margin:20px 0;font-size:13.5px;line-height:1.65;
+}
+article pre code{background:none;border:none;padding:0;color:#c8d6e8;font-size:13.5px}
+article table{
+  width:100%;border-collapse:collapse;margin:22px 0;font-size:14.5px;
+  display:block;overflow-x:auto;
+}
+article th,article td{border:1px solid var(--line);padding:10px 14px;text-align:left}
+article th{background:var(--bg2);font-weight:700;font-size:13px;
+  text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
+article tr:nth-child(even) td{background:rgba(255,255,255,.013)}
+article hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+article blockquote{
+  border-left:3px solid var(--acc2);background:var(--bg2);padding:14px 22px;
+  margin:22px 0;border-radius:0 8px 8px 0;color:var(--dim);
+}
+
+/* ── footer ── */
+footer.site{
+  border-top:1px solid var(--line);padding:34px 0;color:var(--dim);
+  font-size:13.5px;margin-top:40px;
+}
+footer.site .wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+footer.site .mono{font-family:var(--mono);font-size:12px;margin-left:auto}
+
+/* ── pygments (codehilite) ── */
+.highlight{background:var(--code);border:1px solid var(--line);border-radius:11px;margin:20px 0}
+.highlight pre{margin:0;border:none;background:none}
+.highlight .k,.highlight .kd,.highlight .kn{color:#ff79c6}
+.highlight .s,.highlight .s1,.highlight .s2,.highlight .sb{color:#f1fa8c}
+.highlight .c,.highlight .c1,.highlight .cm{color:#6272a4;font-style:italic}
+.highlight .n,.highlight .nf,.highlight .nx{color:#8be9fd}
+.highlight .m,.highlight .mi,.highlight .mf{color:#bd93f9}
+.highlight .o,.highlight .ow{color:#ff79c6}
+.highlight .p{color:#f8f8f2}
+
+@media(max-width:600px){
+  .hero{padding:48px 0 40px}
+  .stats{gap:22px}
+  .card{padding:20px 20px}
+  article h2{font-size:19px}
+}
+@media print{
+  header.site,footer.site,.crumbs{display:none}
+  body{background:#fff;color:#000}
+  .card,article{background:none}
+}

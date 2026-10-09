@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dekripsi Dokumen Konfidensial (RSA Tanpa Padding) — Twist</title>
+<meta name="description" content="Dekripsi Dokumen Konfidensial (RSA Tanpa Padding) — Twist">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site"><div class="wrap">
+  <span class="brand">Twist<span class="dot">://</span>security</span>
+  <nav>
+    <a href="../index.html">Writeups</a>
+    <a href="../index.html#tentang">Tentang</a>
+  </nav>
+</div></header>
+<article><div class="wrap">
+<div class="crumbs"><a href="../index.html">writeups</a> / 003</div>
+<h1>Dekripsi Dokumen Konfidensial (RSA Tanpa Padding)</h1>
+<div class="meta-box">
+  <div><b>Target</b> Juice Shop</div>
+  <div><b>Kelas</b> Cryptography</div>
+  <div><b>Severity</b> <span class="badge" style="color:#ff9d3d">HIGH</span> <small>cvss 7.5</small></div>
+  <div><b>Peneliti</b> Twist</div>
+</div>
+
+<p><strong>Target:</strong> OWASP Juice Shop v6.2.0-SNAPSHOT (instance lokal — lab latihan)
+<strong>Endpoint:</strong> <code>/ftp/announcement_encrypted.md</code> + <code>/ftp/encrypt.pyc</code>
+<strong>Tanggal:</strong> 9 Oktober 2026
+<strong>Peneliti:</strong> Twist
+<strong>Severity:</strong> HIGH (Sensitive Data Exposure / Cryptographic Issues)</p>
+<hr />
+<h2 id="1-ringkasan">1. Ringkasan</h2>
+<p>File <code>/ftp/encrypt.pyc</code> berisi skrip enkripsi yang membocorkan <strong>algoritma + kunci
+publik RSA</strong> yang dipakai untuk melindungi <code>announcement_encrypted.md</code>.</p>
+<p>Karena enkripsi dilakukan <strong>tanpa padding</strong> dan setiap karakter dienkripsi
+terpisah (<code>m</code> selalu &lt; 256), penyerang bisa <strong>brute-force 256 kandidat per
+karakter</strong> — tidak perlu memfaktorkan modulus RSA yang 1024-bit.</p>
+<p><strong>Hasil: seluruh 1.194 karakter dokumen konfidensial berhasil didekripsi (0 gagal).</strong></p>
+<hr />
+<h2 id="2-dampak">2. Dampak</h2>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Autentikasi</td>
+<td><strong>Tidak butuh</strong> — file di direktori publik <code>/ftp</code></td>
+</tr>
+<tr>
+<td>Kendala kriptografi</td>
+<td><strong>NOL</strong> — tidak perlu faktorisasi RSA</td>
+</tr>
+<tr>
+<td>Waktu serangan</td>
+<td><strong>&lt; 1 detik</strong> untuk 1.194 karakter</td>
+</tr>
+<tr>
+<td>Data terungkap</td>
+<td>Dokumen konfidensial "Major Announcement — Token Sale / ICO"</td>
+</tr>
+</tbody>
+</table>
+<p>Prinsip yang dilanggar: <strong>prinsip Kerckhoffs</strong> — keamanan harus bergantung pada
+kunci privat, bukan pada kerahasiaan algoritma. Di sini algoritmanya bocor
+(<code>encrypt.pyc</code>), skema enkripsinya cacat, dan hasilnya = dokumen terbuka.</p>
+<hr />
+<h2 id="3-langkah-reproduksi">3. Langkah Reproduksi</h2>
+<h3 id="bukti-1-ambil-file-terenkripsi-dan-skrip-enkripsi">Bukti 1 — Ambil file terenkripsi dan skrip enkripsi</h3>
+<div class="codehilite"><pre><span></span><code><span class="err">GET /ftp/announcement_encrypted.md HTTP/1.1     → 200, 369.237 byte</span>
+<span class="err">GET /ftp/encrypt.pyc%2500.md HTTP/1.1          → 200, 573 byte  (bypass filter, lihat §3 dok 002)</span>
+</code></pre></div>
+
+<p>File <code>encrypt.pyc</code> diblok filter ekstensi → di-bypass pakai null byte
+(<code>%2500</code>). Detail tekniknya ada di <code>002-juice-shop-full-recon.md</code> §3.</p>
+<h3 id="bukti-2-dekompilasi-encryptpyc">Bukti 2 — Dekompilasi <code>encrypt.pyc</code></h3>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>uncompyle6
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"from uncompyle6 import decompile_file; import io,sys; \</span>
+<span class="s2">  b=io.StringIO(); decompile_file('encrypt.pyc', b); print(b.getvalue())"</span>
+</code></pre></div>
+
+<p><strong>Hasil dekompilasi (<code>encrypt.py</code>):</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="n">confidential_document</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s1">'announcement.md'</span><span class="p">,</span> <span class="s1">'r'</span><span class="p">)</span>
+<span class="n">N</span> <span class="o">=</span> <span class="mi">14590676800758332323018693934907063529240187237535716439958187101987</span>
+    <span class="mi">34387990053589383695714026701498021218180862924674228281570229220767</span>
+    <span class="mi">46906543401224889672472407926969987100581290103199317858753663710862</span>
+    <span class="mi">35765651050788371429711563734278891146353510271203276516651841172685</span>
+    <span class="mi">9837988672111837205085526346618740053</span>
+<span class="n">e</span> <span class="o">=</span> <span class="mi">65537</span>
+<span class="n">encrypted_document</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s1">'announcement_encrypted.md'</span><span class="p">,</span> <span class="s1">'w'</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">char</span> <span class="ow">in</span> <span class="n">confidential_document</span><span class="o">.</span><span class="n">read</span><span class="p">():</span>
+    <span class="n">encrypted_document</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">pow</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="n">char</span><span class="p">),</span> <span class="n">e</span><span class="p">,</span> <span class="n">N</span><span class="p">))</span> <span class="o">+</span> <span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="p">)</span>
+<span class="n">encrypted_document</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</code></pre></div>
+
+<p><strong>Analisis:</strong></p>
+<div class="codehilite"><pre><span></span><code>N = 1024-bit (309 digit)
+e = 65537
+Cipher: c_i = ord(char_i)^e mod N   ← PER KARAKTER, TANPA PADDING
+</code></pre></div>
+
+<h3 id="bukti-3-identifikasi-kelemahan">Bukti 3 — Identifikasi kelemahan</h3>
+<div class="codehilite"><pre><span></span><code>Ukuran ciphertext  : 1.194 angka  → 1.194 karakter plaintext
+Range nilai        : semua &lt; N (1024-bit)
+Rata-rata bit      : 1022,6
+
+Kelemahan kritis:
+  plaintext = ord(char) → selalu &lt; 256
+  → ruang pencarian cuma 256 kemungkinan per karakter
+  → brute-force = 256 eksponensiasi modular
+</code></pre></div>
+
+<h3 id="bukti-4-serangan-rsa-no-padding-brute-force">Bukti 4 — Serangan: RSA no-padding brute force</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">N</span> <span class="o">=</span> <span class="mf">14590676800758332323018693934907063529240187237535716439958187101987.</span><span class="o">..</span>
+<span class="n">e</span> <span class="o">=</span> <span class="mi">65537</span>
+
+<span class="c1"># tabel lookup: 256 kemungkinan saja</span>
+<span class="n">tabel</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">256</span><span class="p">):</span>
+    <span class="n">tabel</span><span class="p">[</span><span class="nb">pow</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">N</span><span class="p">)]</span> <span class="o">=</span> <span class="n">m</span>     <span class="c1"># c : m</span>
+
+<span class="c1"># dekripsi</span>
+<span class="n">vals</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">open</span><span class="p">(</span><span class="s1">'announcement_encrypted.md'</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()]</span>
+<span class="n">plain</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">chr</span><span class="p">(</span><span class="n">tabel</span><span class="p">[</span><span class="n">c</span><span class="p">])</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">vals</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">tabel</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Hasil eksekusi:</strong></p>
+<div class="codehilite"><pre><span></span><code>tabel lookup : 256 entri, 0.0s
+ciphertext   : 1.194 angka
+dekripsi     : 0.0s
+gagal        : 0
+</code></pre></div>
+
+<h3 id="bukti-5-isi-dokumen-terdekripsi">Bukti 5 — Isi dokumen terdekripsi</h3>
+<div class="codehilite"><pre><span></span><code>Major Announcement:
+
+Token Sale - Initial Coin Offering
+
+Lorem ipsum dolor sit amet, consetetur sadipscing elitr, ...
+
+URL: /#/tokensale-ico-ea
+
+[...]
+</code></pre></div>
+
+<p><strong>1.194 karakter, 100% terdekripsi, nol karakter gagal.</strong></p>
+<h3 id="catatan-jebakan-yang-ditemukan">Catatan — Jebakan yang Ditemukan</h3>
+<p>GitHub issue Juice Shop <a href="https://github.com/juice-shop/juice-shop/issues/1392">#1392</a>
+melaporkan bahwa <strong>nilai N di dalam .pyc berbeda</strong> dari N yang dipakai untuk
+mengenkripsi file. Artinya:</p>
+<div class="codehilite"><pre><span></span><code>✗ Faktorisasi N       → sia-sia (N tidak sesuai / tidak bisa difaktorkan)
+✗ Menghitung d        → tidak mungkin tanpa p, q
+✅ BRUTE FORCE 256    → JALAN, karena tidak butuh N yang benar untuk
+                        SEMUA kandidat — cukup cari m yang menghasilkan c
+</code></pre></div>
+
+<p>Pelajaran: <strong>selalu serang kelemahan skema, bukan kelemahan kunci.</strong>
+1024-bit RSA itu kuat — tapi RSA <strong>tanpa padding</strong> untuk pesan 1 byte tidak.</p>
+<hr />
+<h2 id="4-akar-masalah">4. Akar Masalah</h2>
+<p>Tiga kesalahan berlapis:</p>
+<p><strong>1. Skrip enkripsi disimpan di direktori publik</strong>
+<code>encrypt.pyc</code> ada di <code>/ftp</code> — menyerahkan algoritma ke penyerang (langgar Kerckhoffs).</p>
+<p><strong>2. RSA tanpa padding (textbook RSA)</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># SALAH — textbook RSA</span>
+<span class="n">encrypted_document</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">pow</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="n">char</span><span class="p">),</span> <span class="n">e</span><span class="p">,</span> <span class="n">N</span><span class="p">))</span> <span class="o">+</span> <span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="p">)</span>
+
+<span class="c1"># BENAR — pakai OAEP padding + enkripsi per-blok</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">Crypto.Cipher</span><span class="w"> </span><span class="kn">import</span> <span class="n">PKCS1_OAEP</span>
+<span class="n">cipher</span> <span class="o">=</span> <span class="n">PKCS1_OAEP</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">public_key</span><span class="p">)</span>
+<span class="n">encrypted</span> <span class="o">=</span> <span class="n">cipher</span><span class="o">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>   <span class="c1"># pesan utuh, bukan per karakter</span>
+</code></pre></div>
+
+<p><strong>3. Enkripsi per karakter</strong>
+Membuat ruang pencarian jadi 256. Bahkan dengan padding, mengenkripsi
+per karakter itu pola yang buruk.</p>
+<hr />
+<h2 id="5-saran-perbaikan">5. Saran Perbaikan</h2>
+<p><strong>1. Hapus skrip enkripsi dari direktori publik</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># encrypt.pyc TIDAK BOLEH ada di /ftp — pindah ke luar document root</span>
+</code></pre></div>
+
+<p><strong>2. Ganti ke RSA dengan OAEP + enkripsi per-blok</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">Crypto.PublicKey</span><span class="w"> </span><span class="kn">import</span> <span class="n">RSA</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">Crypto.Cipher</span><span class="w"> </span><span class="kn">import</span> <span class="n">PKCS1_OAEP</span>
+
+<span class="n">key</span> <span class="o">=</span> <span class="n">RSA</span><span class="o">.</span><span class="n">import_key</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="s1">'private.pem'</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+<span class="n">cipher</span> <span class="o">=</span> <span class="n">PKCS1_OAEP</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">'announcement.md'</span><span class="p">,</span><span class="s1">'rb'</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+<span class="n">ct</span> <span class="o">=</span> <span class="n">cipher</span><span class="o">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>          <span class="c1"># enkripsi utuh, ada padding</span>
+</code></pre></div>
+
+<p><strong>3. Jangan pakai RSA untuk data besar</strong>
+RSA cuma untuk enkripsi kunci. Untuk file pakai hybrid:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># RSA untuk membungkus kunci AES, AES untuk file</span>
+<span class="n">aes_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">urandom</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span>
+<span class="n">ct_file</span> <span class="o">=</span> <span class="n">AESGCM</span><span class="p">(</span><span class="n">aes_key</span><span class="p">)</span><span class="o">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">nonce</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+<span class="n">ct_key</span>  <span class="o">=</span> <span class="n">PKCS1_OAEP</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">rsa_pub</span><span class="p">)</span><span class="o">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">aes_key</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>4. Matikan directory listing <code>serve-index</code> di <code>/ftp</code></strong>
+Lihat <code>002-juice-shop-full-recon.md</code> §2.</p>
+<p><strong>5. Audit ulang berkas di direktori publik</strong>
+Hapus/relokasi semua <code>.bak</code>, <code>.pyc</code>, <code>.kdbx</code>, <code>.yml</code>, <code>.json</code> dari sana.</p>
+<hr />
+<h2 id="6-lampiran-bukti">6. Lampiran — Bukti</h2>
+<div class="codehilite"><pre><span></span><code>Dekompilasi : encrypt.pyc → RSA textbook, N=1024-bit, e=65537
+Plaintext   : loot/announcement_DECRYPTED.md  (1.194 karakter)
+Ciphertext  : loot/announcement_encrypted.md  (369.237 byte, 1.194 angka)
+Skrip       : loot2/encrypt.pyc               (573 byte)
+Referensi   : GitHub juice-shop/juice-shop issue #1392
+</code></pre></div>
+
+<hr />
+<h2 id="7-yang-belum-selesai-jujur">7. Yang Belum Selesai (jujur)</h2>
+<div class="codehilite"><pre><span></span><code>✗ coupons_2013.md.bak (142 byte, 12 baris × 10 char)
+  → Bukan RSA (angkanya bukan numerik besar)
+  → Bukan XOR/ADD/substitusi 1-byte (skor maksimum 0.883, tidak bersih)
+  → Pos 0 nilai {k,l,m,n,o,p,q} BERURUTAN di ASCII → ada pola ADD
+  → Tapi 1-byte shift tidak menghasilkan kupon bersih
+  → Butuh decrypt.py (versi asli) untuk membalik algoritmanya
+  → STATUS: BELUM TERPECAHKAN
+</code></pre></div>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+</div></article>
+<footer class="site"><div class="wrap">
+  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
+  <span class="mono">dibuat 2026-10-09</span>
+</div></footer>
+</body>
+</html>

