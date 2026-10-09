@@ -1,33 +1,35 @@
 # Twist — Security Research Portfolio
 
-Portofolio writeup penetration testing. Situs statis, dibangun dari markdown.
+Penetration testing write-ups. Static site, generated from markdown.
 
-**Isi:** 4 writeup dari pengujian lab legal (OWASP Juice Shop) — SQLi,
-broken access control, DOM XSS, kriptografi, recon menyeluruh.
+**Contents:** 4 write-ups from authorised lab testing (OWASP Juice Shop) —
+SQL injection, broken access control, DOM XSS, cryptography, and full
+reconnaissance.
 
 ---
 
-## Struktur
+## Structure
 
 ```
 security-portfolio/
 ├── build.py                        # generator: markdown → HTML
-├── writeups/                       # sumber: file markdown
+├── writeups-en/                    # SOURCE: English markdown
 │   ├── 001-juice-shop-sqli.md
 │   ├── 002-juice-shop-full-recon.md
 │   ├── 003-juice-shop-rsa-decrypt.md
 │   └── 004-juice-shop-broken-access-control-xss.md
-├── site/                           # HASIL build (yang dipublikasikan)
+├── writeups/                       # Indonesian versions (archive, not published)
+├── site/                           # BUILD OUTPUT (what gets published)
 │   ├── index.html
 │   ├── assets/style.css
 │   ├── writeups/*.html
 │   └── .nojekyll
-└── .github/workflows/pages.yml     # auto-build + deploy ke GitHub Pages
+└── .github/workflows/pages.yml     # auto-build + deploy to GitHub Pages
 ```
 
 ---
 
-## Cara Pakai Lokal
+## Local Usage
 
 ```bash
 # install
@@ -38,82 +40,97 @@ python build.py
 
 # preview
 cd site && python -m http.server 8899
-# buka http://localhost:8899
+# open http://localhost:8899
 ```
 
-Setiap kali markdown di `writeups/` diubah, jalankan `python build.py` lagi.
-Metadata judul/severity diatur di dictionary `META` dalam `build.py`.
+Re-run `python build.py` whenever markdown in `writeups-en/` changes.
+Titles, severities and class labels are configured in the `META` dictionary
+inside `build.py`.
 
 ---
 
-## Cara Publikasi ke GitHub Pages
+## Publishing to GitHub Pages
 
-### Sekali setup (butuh login GitHub)
+The site is already live. To redeploy after an edit:
 
 ```bash
-gh auth login                    # ikuti instruksi di layar
-
 cd security-portfolio
+python build.py                     # rebuild (optional — CI rebuilds too)
 git add -A
-git commit -m "feat: portofolio writeup keamanan"
-
-# opsi A — repo biasa (Pages aktif di /docs atau via Actions)
-gh repo create security-writeups --public --source=. --push
-
-# opsi B — repo user (langsung jadi <user>.github.io)
-gh repo create <USERNAME>.github.io --public --source=. --push
+git commit -m "add write-up 005"
+git push
+# → Actions builds and deploys automatically (~30 seconds)
 ```
 
-### Aktifkan Pages
+### Live URLs
+
+| | |
+|---|---|
+| **Site** | https://twist5202-ux.github.io/security-writeups/ |
+| **Repo** | https://github.com/twist5202-ux/security-writeups |
+
+### First-time setup (if cloning fresh)
 
 ```bash
-# via CLI
-gh api -X POST "repos/{owner}/security-writeups/pages" \
-  -f "source[branch]=main" -f "source[path]=/site" 2>/dev/null \
-  || echo "atau aktifkan manual: Settings → Pages"
-
-# atau manual di web:
-#   Settings → Pages → Source: GitHub Actions
+gh auth login                       # follow the on-screen instructions
+gh repo create security-writeups --public --source=. --remote=origin --push
+gh api -X POST "repos/twist5202-ux/security-writeups/pages" -f "build_type=workflow"
 ```
 
-Workflow `.github/workflows/pages.yml` akan otomatis
-build + deploy setiap push ke `main`.
-
-### URL hasil
-
-```
-https://<USERNAME>.github.io/security-writeups/
-```
-atau kalau pakai repo user:
-```
-https://<USERNAME>.github.io/
-```
+The workflow in `.github/workflows/pages.yml` handles build + deploy on every
+push to `main`. Pages must be set to source **GitHub Actions**
+(Settings → Pages → Source).
 
 ---
 
-## Alternatif Tanpa GitHub
+## Alternative Hosting
 
-Kalau gak mau pakai GitHub, folder `site/` bisa di-upload ke:
+The `site/` folder is plain static HTML — it works anywhere:
 
-| Layanan | Cara |
+| Service | How |
 |---|---|
-| Netlify | drag & drop folder `site/` ke app.netlify.com/drop |
-| Cloudflare Pages | sambungkan repo, build command `python build.py`, output `site` |
+| Netlify | drag & drop the `site/` folder onto app.netlify.com/drop |
+| Cloudflare Pages | connect the repo, build command `python build.py`, output dir `site` |
 | Vercel | `vercel deploy site` |
 | Surge | `npx surge site` |
 
-Semua opsi di atas gratis dan gak perlu kartu kredit.
+All of the above are free and need no credit card.
 
 ---
 
-## Catatan Etika
+## Adding a New Write-up
 
-Semua pengujian dilakukan di **lab legal** (OWASP Juice Shop — aplikasi
-latihan resmi OWASP yang memang dibuat rentan). Tidak ada sistem pihak
-ketiga yang diuji tanpa izin.
+1. Write the markdown file in `writeups-en/` (e.g. `005-jwt-manipulation.md`)
+2. Add an entry to the `META` dictionary in `build.py`:
+
+```python
+"005": {
+    "short": "JWT Algorithm Confusion → Privilege Escalation",
+    "target": "Juice Shop",
+    "class": "Authentication",
+    "sev": "HIGH",
+    "cvss": "8.1",
+    "file": "005-jwt-manipulation.md",
+    "take": "One-line summary shown on the index card.",
+},
+```
+
+3. `python build.py` → `git add -A && git commit -m "add 005" && git push`
 
 ---
 
-## Lisensi
+## Ethics Note
 
-Konten writeup: CC BY 4.0. Kode `build.py`: MIT.
+Every test documented here was performed against an **authorised training lab**
+— primarily OWASP Juice Shop, an intentionally vulnerable application that OWASP
+maintains for exactly this purpose. No third-party system was tested without
+written permission.
+
+Findings that could not be confirmed are labelled as unconfirmed in the reports
+rather than overstated.
+
+---
+
+## Licence
+
+Write-up content: CC BY 4.0. `build.py`: MIT.
