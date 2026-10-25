@@ -13,13 +13,14 @@ findings that did not work out.
 
 | Metric | Value |
 |---|---|
-| Reports submitted | 4 (3 closed, 1 awaiting triage) |
+| Reports submitted | 5 (3 closed, 1 awaiting triage, 1 Immunefi) |
 | Reports ready to submit | 0 |
 | Findings documented end-to-end | 7 |
 | Public bounty programs scoped | 16 |
 | Lab write-ups published | 4 |
 | Upstream fix pull requests | 1 open |
 | On-chain research published | 1 (dev.to, submitted to Taskmarket) |
+| Smart-contract reports submitted | 1 (Immunefi, Avail Bridge) |
 | Bounties received | **$0** |
 
 The last line is deliberate. A portfolio that only lists wins is a marketing page;
@@ -110,7 +111,10 @@ sections above; work that produced no finding is not dressed up as one.
 recon      subfinder · httpx · nuclei · katana · ffuf · dnsx · naabu · waybackurls
 testing    Burp Suite · browser devtools · curl
 code       Go toolchain · Node.js · Python (markdown, cvss, requests) · ripgrep · git
+mobile     apktool · smali review · AndroidManifest analysis · assetlinks.json verification
+contracts  Foundry · solc · Sourcify · Etherscan/BscScan API · DexScreener
 analysis   bytecode decompilation · RSA/crypto pitfalls · JS bundle review · CVSS 4.0 & 3.1
+onchain    baw CLI (Binance Agentic Wallet) · taskmarket CLI · eth_call / eth_estimateGas
 delivery   report writing to platform field structure · evidence packaging
 ```
 
@@ -269,3 +273,62 @@ Hands-on with the agentic-commerce stack:
   `eth_call` / `eth_estimateGas` before broadcasting
 - **Internet Court skill** — reviewed the ERC-7710 / x402 / escrow / adjudication
   stack and its security-scan findings before use
+
+---
+
+## Smart contract security — Avail Bridge (Immunefi)
+
+**Report:** Immunefi submission, Avail Bridge smart contracts · **Status:** submitted
+**Severity claimed:** Critical
+
+`SP1Vector.commitHeaderRange` uses `&&` instead of `||` in trusted-header
+validation, allowing an approved relayer to commit an attacker-controlled
+`dataRootCommitment` and forge arbitrary bridge messages.
+
+**Contracts involved (Ethereum mainnet):**
+
+| Contract | Address |
+|---|---|
+| VectorX proxy | `0x02993cdc11213985b9b13224f3af289f03bf298d` |
+| VectorX implementation (`SP1Vector` v2.0.0) | `0xc6217f1549Cab6f22ac4AC56d42e6C248731a33D` |
+| Bridge proxy | `0x054fd961708D8E2B9c10a63F6157c74458889F0a` |
+| Bridge implementation (`AvailBridgeV1`) | `0x737539737b44493F65c17eAfE165197b6410d254` |
+
+Deployed state at time of report: `latestBlock = 3616640`,
+`latestAuthoritySetId = 914`, `headerRangeCommitmentTreeSize = 2048`,
+`checkRelayer = true`, `frozen = false`.
+
+The submission includes a Foundry proof-of-concept (`poc-avail/`) that reproduces
+the forged commitment against the deployed bytecode, plus the argument for why the
+finding is not "privileged address only" — the relayer role is the intended
+attacker model for a bridge, and the bug converts a trusted relayer into an
+arbitrary-message forger.
+
+---
+
+## Market research — bounty landscape (20 Oct 2026)
+
+Documented so the numbers behind later prioritisation decisions are reproducible.
+Run with the `gh` CLI (account `twist5202-ux`, scopes `repo`/`gist`/`workflow`/
+`read:org`) against public platform APIs. All figures come from real queries, not
+estimates.
+
+**Headline finding: the open-source bounty market is currently empty.** Of ~561
+issues labelled `bounty`, none were claimable. The three large audit platforms had
+no active contests.
+
+Evidence per candidate:
+
+- **`AsherKasper/bounty-census`** (independent verifier) — 561 open issues,
+  advertised total $1,142,625. After filtering (active repo, <25 bounties, ≥25
+  stars, <25 comments): **0 bounties, $0**. 99% of the money concentrated in 3
+  repos with abnormal profiles. Algora pays via comment, so labels and issues stay
+  open forever; 9 of its 14 prior recommendations were already paid in 2024.
+- **`auscaster/frantic-board`** — 592 stars, MIT, "HELP WANTED: AI AGENTS". Real,
+  public ledger, x402 payouts (crypto, no bank). But the rates are $1, $1, $1, $2
+  per task with 100 slots. Total moved in 126 days: $1,332.35 across 1,577 agents
+  = **$0.85 per agent**. Only remaining item of value: #97 at $10, 5 slots.
+  Verdict: research experiment, not an income source.
+
+This is why the work moved toward escrowed task marketplaces and bounty programs
+with verified payouts rather than open-issue bounty labels.
